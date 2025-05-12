@@ -226,12 +226,12 @@ variables:
     {{ map }}
 
 trigger: !input automation_trigger
+conditions: !input automation_conditions
 
 action:
   - choose:
       - conditions:
           - "{{ forecast_entity != 'unavailable' }}"
-          - condition: !input automation_conditions
         sequence:
           - action: weather.get_forecasts
             target:
@@ -362,7 +362,7 @@ action:
                   },
                   {
                     "type": "text",
-                    "value": "{% if wind_or_precipitation == 'windspeed' %}{{ state_attr(forecast_entity, 'wind_speed')| round }}{{ state_attr(forecast_entity, 'wind_speed_unit')}}{% else %}{{ weather_home_hourly[forecast_entity]['forecast'][0].precipitation|round }}{{ state_attr(forecast_entity, 'precipitation_unit')}}{% endif %}",
+                    "value": "{% if wind_or_precipitation == 'windspeed' %}{{ state_attr(forecast_entity, 'wind_speed')| round }}{{ state_attr(forecast_entity, 'wind_speed_unit')}}{% else %}{{ weather_home_hourly[forecast_entity]['forecast'][0].precipitation }}{{ state_attr(forecast_entity, 'precipitation_unit')}}{% endif %}",
                     "font": "{{ font_file }}",
                     "x": 26,
                     "y": 132,
