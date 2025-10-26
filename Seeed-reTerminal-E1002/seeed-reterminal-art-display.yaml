@@ -1,0 +1,391 @@
+####################################################
+## Seeed reTerminal Art Display
+##
+## Configuration to use a Seeed reTerminal E1002 Spectra 6 color e-ink display as a digital art frame.
+## 
+## HOW TO USE
+## 1. Set substitutions for names, keys, passwords, etc.
+## 2. Set substitution ha_www_url to the publicly accessible URL of your www folder, with trailing slash. This default should work for most people.
+##    For more information, check: https://www.home-assistant.io/integrations/http/#hosting-files
+## 3. If you want to store the images you will display in a subfolder, set substitution album_folder to the name of this folder and add a trailing slash. 
+##    Change to "" if no subfolder is used.
+## 4. Set substitution max_images to the maximum amount of images you want to use in the future without having to update this configuration again.
+## 5. Install this configuration onto your Seeed reTerminal E1002 display.
+## 6. Upload properly prepared PNG images to the (sub)folder you configured. Number them sequentially, starting at 1.png, followed by 2.png, etc.
+##    This configuration assumes a continuous set of sequentially ascending numbered files, with no gaps.
+## 7. In Home Assistant, set the "Total Images" number of this ESPHome device to the highest numbered image you have uploaded.
+##    Update this number if you upload additional (sequentially-numbered) images.
+## 8. Use the white buttons on top of the display to go forward/backward sequentially through your images. Use the green button to go to a random image.
+## 9. In Home Assistant, set the "Current Image" number of this ESPHome device to go to that specific numbered image.
+##
+## To prepare images for use on this display, ensure they are:
+## - In PNG format
+## - In 800x480 pixel resolution
+## - Dithered to the 6-color palette of the Spectra 6 e-ink panel in this display (the 6 colors are Black, White, Red, Green, Blue, Yellow)
+##
+## TIP: For best image quality, use the epdoptimize demo tool from paperlesspaper to dither your images.
+##      It uses a Spectra 6-calibrated color palette while dithering for more realistic colors on the e-ink display.
+##      https://paperlesspaper.de/en/blog/dither-eink-tool-open-source
+##
+## TO DO / BUGS
+## 1. Implement deep sleep for ESP32 so we can keep battery going for as long as possible
+## 2. Make sure entities are disabled by default if not needed and are categorized as configuration or diagnostic correctly
+## 3. Audio feedback buzzer sometimes can't be heard, even though audio feedback switch is on
+##
+## By Guy Sie (https://github.com/guysie)
+## Based on configuration by Paul Krischer (https://github.com/SqyD) to use the Seeed Reterminal 1002 with the new epaper_spi component and LVGL
+##
+####################################################
+
+substitutions:
+  name: seeed-reterminal
+  friendly_name: "Seeed reTerminal"
+  project_name: "Guy Sie.reTerminal Art Display"
+  project_version: "0.1.0"
+  api_key: ""
+  ota_password: ""
+  ap_password: ""
+  wifi_ssid: !secret wifi_ssid
+  wifi_password: !secret wifi_password
+  ha_www_url: "http://homeassistant.local:8123/local/"
+  album_folder: "reterminal/"
+  max_images: 1000
+
+####################################################
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  project:
+    name: ${project_name}
+    version: ${project_version}
+  on_boot:
+    - priority: 600
+      then:
+# Enable battery voltage measurement
+        - output.turn_on: bsp_battery_enable
+    - priority: -100
+      then:
+        - lvgl.page.show: main_page
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: ${api_key}
+
+ota:
+  - platform: esphome
+    password: ${ota_password}
+
+wifi:
+  ssid: ${wifi_ssid}
+  password: ${wifi_password}
+# Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Seeed-Reterminal"
+    password: ${ap_password}
+
+captive_portal:
+
+http_request:
+
+
+## Hardware configuration (ESP, buttons, sensors, battery, buzzer, LED)
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+psram:
+  mode: octal
+
+i2c:
+  scl: GPIO20
+  sda: GPIO19
+
+binary_sensor:
+# Left white button (back)
+  - platform: gpio
+    pin:
+      number: GPIO5
+      mode: INPUT_PULLUP
+      inverted: true
+    id: button_1
+    name: "Button Left"
+    disabled_by_default: true
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 150ms
+              - light.turn_off: buzzer
+# If currently displayed image is the first one in the folder, don't go further back
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state == 1;'
+            then:
+              - logger.log: "Image counter already at minimum image count"
+            else:
+              - number.decrement:
+                  id: image_counter
+                  cycle: false
+
+# Right white button (forward)
+  - platform: gpio
+    pin:
+      number: GPIO4
+      mode: INPUT_PULLUP
+      inverted: true
+    id: button_2
+    name: "Button Right"
+    disabled_by_default: true
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 150ms
+              - light.turn_off: buzzer
+# If currently displayed image is the last one in the folder, don't go further forward
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state == id(total_images).state;'
+            then:
+              - logger.log: "Image counter already at total image count"
+            else:
+              - number.increment:
+                  id: image_counter
+                  cycle: false
+
+# Green button (random)
+  - platform: gpio
+    pin:
+      number: GPIO3
+      mode: INPUT_PULLUP
+      inverted: true
+    id: button_3
+    name: "Button Green"
+    disabled_by_default: true
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 150ms
+              - light.turn_off: buzzer
+        - number.set:
+            id: image_counter
+            value: !lambda |-
+              uint32_t random_value = esp_random();
+              return (random_value % (int)id(total_images).state);
+
+sensor:
+# Temperature and Relative Humidity sensor configuration
+  - platform: sht4x
+    temperature:
+      name: "Temperature"
+      id: temp_sensor
+    humidity:
+      name: "Relative Humidity"
+      id: hum_sensor
+# Battery voltage and Battery level sensor configuration
+  - platform: adc
+    pin: GPIO1
+    name: "Battery Voltage"
+    id: battery_voltage
+#    disabled_by_default: true
+    internal: true
+    update_interval: 60s
+    attenuation: 12db
+    filters:
+# Compensate for voltage divider
+      - multiply: 2.0 
+  - platform: template
+    name: "Battery Level"
+    id: battery_level
+    entity_category: diagnostic
+    unit_of_measurement: "%"
+    icon: "mdi:battery"
+    device_class: battery
+    state_class: measurement
+    lambda: 'return id(battery_voltage).state;'
+    update_interval: 10s
+    filters:
+      - calibrate_linear:
+          - 4.15 -> 100.0
+          - 3.96 -> 90.0
+          - 3.91 -> 80.0
+          - 3.85 -> 70.0
+          - 3.80 -> 60.0
+          - 3.75 -> 50.0
+          - 3.68 -> 40.0
+          - 3.58 -> 30.0
+          - 3.49 -> 20.0
+          - 3.41 -> 10.0
+          - 3.30 -> 5.0
+          - 3.27 -> 0.0
+      - clamp:
+          min_value: 0
+          max_value: 100
+
+output:
+# Green side LED GPIO configuration
+  - platform: gpio
+    pin: GPIO6
+    id: led_output
+    inverted: true
+# Battery voltage measurement GPIO configuration
+  - platform: gpio
+    pin: GPIO21
+    id: bsp_battery_enable
+# Buzzer configuration (to control the buzzer pwm, pretend it's an LED light)
+  - platform: ledc
+    pin: GPIO45
+    id: buzzer_pwm
+# The frequency determines the pitch of the buzzer's sound.
+    frequency: 100Hz
+
+light:
+# Expose green side LED to Home Assistant
+  - platform: binary
+    name: "Onboard LED"
+    output: led_output
+    id: onboard_led
+    icon: mdi:led-outline
+    disabled_by_default: true
+# Create a fake light entity to control the buzzer. The 'brightness' of the light controls the buzzer's volume.
+  - platform: monochromatic
+    output: buzzer_pwm
+    name: "Buzzer"
+    id: buzzer
+    icon: mdi:volume-high
+    disabled_by_default: true
+    default_transition_length: 0s
+
+
+## E-ink display configuration (spi, display, lvgl)
+spi:
+  clk_pin: GPIO7
+  mosi_pin: GPIO9
+
+display:
+  - platform: epaper_spi
+    id: epaper_display
+    model: 7.3in-spectra-e6
+    cs_pin: GPIO10
+    dc_pin: GPIO11
+    reset_pin:
+      number: GPIO12
+      inverted: false
+    busy_pin:
+      number: GPIO13
+      inverted: true
+    update_interval: 6000s
+    auto_clear_enabled: false
+
+lvgl:
+  buffer_size: 12%
+  pages:
+    - id: main_page
+      widgets:
+        - image:
+            align: CENTER
+            id: art
+            src: onlineimage
+
+
+## Image variables configuration
+number:
+# Total number of images in the folder; must match highest number filename in the folder
+  - platform: template
+    name: "Total Images"
+    id: total_images
+    icon: mdi:camera-burst
+    min_value: 1
+    max_value: ${max_images}
+    step: 1
+    restore_value: true
+    initial_value: 10
+    optimistic: true
+    mode: box
+# Current image being displayed
+  - platform: template
+    name: "Current Image"
+    id: image_counter
+    icon: mdi:image-frame
+    min_value: 1
+    max_value: ${max_images}
+    step: 1
+    initial_value: 1
+    optimistic: true
+    mode: box
+    on_value:
+      then:
+# If current image is set to a file that can not exist, instead set to the highest-numbered file that can exist.
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state > id(total_images).state;'
+            then:
+              - number.set:
+                  id: image_counter
+                  value: !lambda 'return id(total_images).state;'
+            else:
+# URL of image to display is always updated here
+              - online_image.set_url:
+                  id: onlineimage
+                  url: !lambda |-
+                    char urlstring[254];
+                    sprintf(urlstring, "${ha_www_url}${album_folder}%d%s", (int)id(image_counter).state, ".png");
+                    return (urlstring);
+
+
+## Switch configuration
+switch:
+# Expose switch to let user turn on/off button feedback sounds
+  - platform: template
+    name: "Audio Feedback"
+    id: audiofeedback
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+    lambda: return id(audiofeedback).state;
+  - platform: restart
+    name: "Device Restart"
+
+
+## Online image configuration (online_image, placeholder image)
+online_image:
+  - url: https://placehold.co/10x10/white/white/jpg
+    id: onlineimage
+    type: rgb565
+    format: png
+    placeholder: placehold
+# Display component is always updated here once image has finished downloading
+    on_download_finished:
+      - lvgl.image.update:
+          id: art
+          src: onlineimage
+      - component.update: epaper_display
+
+image:
+# On reboot, a full white empty screen is displayed as first image
+  - file: https://placehold.co/10x10/white/white/jpg
+    id: placehold
+    type: rgb565
+    resize: 800x480
