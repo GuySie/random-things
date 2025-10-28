@@ -33,7 +33,7 @@
 ## 3. Audio feedback buzzer sometimes can't be heard, even though audio feedback switch is on
 ##
 ## By Guy Sie (https://github.com/guysie)
-## Based on configuration by Paul Krischer (https://github.com/SqyD) to use the Seeed Reterminal 1002 with the new epaper_spi component and LVGL
+## Based on configuration by Paul Krischer (https://github.com/SqyD) to use the Seeed reTerminal E1002 with the new epaper_spi component and LVGL
 ##
 ####################################################
 
@@ -41,7 +41,7 @@ substitutions:
   name: seeed-reterminal
   friendly_name: "Seeed reTerminal"
   project_name: "Guy Sie.reTerminal Art Display"
-  project_version: "0.1.0"
+  project_version: "0.2.0"
   api_key: ""
   ota_password: ""
   ap_password: ""
@@ -64,9 +64,14 @@ esphome:
       then:
 # Enable battery voltage measurement
         - output.turn_on: bsp_battery_enable
+# Load random image on boot
     - priority: -100
       then:
-        - lvgl.page.show: main_page
+        - number.set:
+            id: image_counter
+            value: !lambda |-
+              uint32_t random_value = esp_random();
+              return (random_value % (int)id(total_images).state);
 
 # Enable logging
 logger:
@@ -258,7 +263,7 @@ output:
   - platform: ledc
     pin: GPIO45
     id: buzzer_pwm
-# The frequency determines the pitch of the buzzer's sound.
+# The frequency determines the pitch of the buzzer's sound
     frequency: 100Hz
 
 light:
@@ -269,7 +274,7 @@ light:
     id: onboard_led
     icon: mdi:led-outline
     disabled_by_default: true
-# Create a fake light entity to control the buzzer. The 'brightness' of the light controls the buzzer's volume.
+# Create a fake light entity to control the buzzer. The 'brightness' of the light controls the buzzer's volume
   - platform: monochromatic
     output: buzzer_pwm
     name: "Buzzer"
@@ -296,7 +301,7 @@ display:
     busy_pin:
       number: GPIO13
       inverted: true
-    update_interval: 6000s
+    update_interval: never
     auto_clear_enabled: false
 
 lvgl:
@@ -337,7 +342,7 @@ number:
     mode: box
     on_value:
       then:
-# If current image is set to a file that can not exist, instead set to the highest-numbered file that can exist.
+# If current image is set to a file that can not exist, instead set to the highest-numbered file that can exist
         - if:
             condition:
               lambda: 'return id(image_counter).state > id(total_images).state;'
@@ -346,13 +351,28 @@ number:
                   id: image_counter
                   value: !lambda 'return id(total_images).state;'
             else:
-# URL of image to display is always updated here
+# URL of image to display is always updated here, this causes online_image to start downloading
               - online_image.set_url:
                   id: onlineimage
                   url: !lambda |-
                     char urlstring[254];
                     sprintf(urlstring, "${ha_www_url}${album_folder}%d%s", (int)id(image_counter).state, ".png");
                     return (urlstring);
+
+
+## Online image configuration
+online_image:
+  - url: https://placehold.co/10x10/white/white/jpg
+    id: onlineimage
+    type: rgb565
+    format: png
+    resize: 800x480
+# Display component is always updated here once online_image has finished downloading
+    on_download_finished:
+      - lvgl.image.update:
+          id: art
+          src: onlineimage
+      - component.update: epaper_display
 
 
 ## Switch configuration
@@ -367,25 +387,3 @@ switch:
     lambda: return id(audiofeedback).state;
   - platform: restart
     name: "Device Restart"
-
-
-## Online image configuration (online_image, placeholder image)
-online_image:
-  - url: https://placehold.co/10x10/white/white/jpg
-    id: onlineimage
-    type: rgb565
-    format: png
-    placeholder: placehold
-# Display component is always updated here once image has finished downloading
-    on_download_finished:
-      - lvgl.image.update:
-          id: art
-          src: onlineimage
-      - component.update: epaper_display
-
-image:
-# On reboot, a full white empty screen is displayed as first image
-  - file: https://placehold.co/10x10/white/white/jpg
-    id: placehold
-    type: rgb565
-    resize: 800x480
