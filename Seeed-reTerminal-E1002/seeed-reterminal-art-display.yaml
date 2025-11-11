@@ -2,21 +2,35 @@
 ## Seeed reTerminal Art Display
 ##
 ## Configuration to use a Seeed reTerminal E1002 Spectra 6 color e-ink display as a digital art frame.
+## By default, the display will wake up once every 6 hours to display a new random image.
 ## 
 ## HOW TO USE
-## 1. Set substitutions for names, keys, passwords, etc.
-## 2. Set substitution ha_www_url to the publicly accessible URL of your www folder, with trailing slash. This default should work for most people.
-##    For more information, check: https://www.home-assistant.io/integrations/http/#hosting-files
-## 3. If you want to store the images you will display in a subfolder, set substitution album_folder to the name of this folder and add a trailing slash. 
-##    Change to "" if no subfolder is used.
-## 4. Set substitution max_images to the maximum amount of images you want to use in the future without having to update this configuration again.
-## 5. Install this configuration onto your Seeed reTerminal E1002 display.
-## 6. Upload properly prepared PNG images to the (sub)folder you configured. Number them sequentially, starting at 1.png, followed by 2.png, etc.
-##    This configuration assumes a continuous set of sequentially ascending numbered files, with no gaps.
-## 7. In Home Assistant, set the "Total Images" number of this ESPHome device to the highest numbered image you have uploaded.
-##    Update this number if you upload additional (sequentially-numbered) images.
-## 8. Use the white buttons on top of the display to go forward/backward sequentially through your images. Use the green button to go to a random image.
-## 9. In Home Assistant, set the "Current Image" number of this ESPHome device to go to that specific numbered image.
+##
+## PREPARATION
+## 01. Set substitutions for names, keys, passwords, etc.
+## 02. Set substitution ha_www_url to the publicly accessible URL of your www folder, with trailing slash. This default should work for most people.
+##     For more information, check: https://www.home-assistant.io/integrations/http/#hosting-files
+## 03. If you want to store the images you will display in a subfolder, set substitution album_folder to the name of this folder and add a trailing slash. 
+##     Change to "" if no subfolder is used.
+## 04. Set substitution max_images to the maximum amount of images you want to use in the future without having to update this configuration again.
+## 05. Create a helper boolean in Home Assistant that will control whether this frame goes into deep sleep. Set substitution ha_deep_sleep to this helper's entity name.
+## 06. Set substitution deep_sleep_run to the amount of time the frame should stay awake. By default this is set to 1 minute, which is enough to load a random image.
+## 07. Set substitution deep_sleep_duration to the amount of time the frame should sleep. By default this is set to 6 hours, so the frame refreshes 4 times each day.
+## 08. Upload properly prepared PNG images to the (sub)folder you configured. Number them sequentially, starting at 1.png, followed by 2.png, etc.
+##     This configuration assumes a continuous set of sequentially ascending numbered files, with no gaps.
+##
+## INSTALLATION
+## 09. Set your deep sleep helper boolean to off, so you can configure the display after installation.
+## 10. Install this configuration onto your Seeed reTerminal E1002 display.
+## 11. Add the display to Home Assistant after it has been discovered.
+## 12. In Home Assistant, set the "Total Images" number of this ESPHome device to the highest numbered image you have uploaded.
+##     Update this number if you upload additional (sequentially-numbered) images.
+##
+## USAGE
+## 13. Set your deep sleep helper boolean to on, so the display with automatically go through deep sleep cycles. Every time it wakes, it will load a random image.
+## 14. Press the green button to wake the display out of deep sleep, and load a random image.
+## 15. While the display is awake, press the white buttons on top of the display to go forward/backward sequentially through your images.
+## 16. While the display is awake, set the "Current Image" number of this device in Home Assistant to go to that specific numbered image.
 ##
 ## To prepare images for use on this display, ensure they are:
 ## - In PNG format
@@ -27,11 +41,6 @@
 ##      It uses a Spectra 6-calibrated color palette while dithering for more realistic colors on the e-ink display.
 ##      https://paperlesspaper.de/en/blog/dither-eink-tool-open-source
 ##
-## TO DO / BUGS
-## 1. Implement deep sleep for ESP32 so we can keep battery going for as long as possible
-## 2. Make sure entities are disabled by default if not needed and are categorized as configuration or diagnostic correctly
-## 3. Audio feedback buzzer sometimes can't be heard, even though audio feedback switch is on
-##
 ## By Guy Sie (https://github.com/guysie)
 ## Based on configuration by Paul Krischer (https://github.com/SqyD) to use the Seeed reTerminal E1002 with the new epaper_spi component and LVGL
 ##
@@ -41,7 +50,7 @@ substitutions:
   name: seeed-reterminal
   friendly_name: "Seeed reTerminal"
   project_name: "Guy Sie.reTerminal Art Display"
-  project_version: "0.2.0"
+  project_version: "0.3.0"
   api_key: ""
   ota_password: ""
   ap_password: ""
@@ -50,6 +59,9 @@ substitutions:
   ha_www_url: "http://homeassistant.local:8123/local/"
   album_folder: "reterminal/"
   max_images: 1000
+  ha_deep_sleep: "input_boolean.reterminal_deep_sleep"
+  deep_sleep_run: "1min"
+  deep_sleep_duration: "6h"
 
 ####################################################
 
@@ -60,11 +72,11 @@ esphome:
     name: ${project_name}
     version: ${project_version}
   on_boot:
+# Enable battery voltage measurement
     - priority: 600
       then:
-# Enable battery voltage measurement
         - output.turn_on: bsp_battery_enable
-# Load random image on boot
+# Load random image on boot (includes waking from deep sleep)
     - priority: -100
       then:
         - number.set:
@@ -96,6 +108,17 @@ wifi:
 captive_portal:
 
 http_request:
+
+
+## Deep sleep configuration
+# Comment out to disable deep sleep. This lets you use the green button as a control instead
+deep_sleep:
+  id: deep_sleep_1
+  run_duration: ${deep_sleep_run}
+  sleep_duration: ${deep_sleep_duration}
+# Green button interrupts deep sleep
+  wakeup_pin: GPIO3
+  wakeup_pin_mode: INVERT_WAKEUP
 
 
 ## Hardware configuration (ESP, buttons, sensors, battery, buzzer, LED)
@@ -174,49 +197,50 @@ binary_sensor:
                   id: image_counter
                   cycle: false
 
-# Green button (random)
-  - platform: gpio
-    pin:
-      number: GPIO3
-      mode: INPUT_PULLUP
-      inverted: true
-    id: button_3
-    name: "Button Green"
-    disabled_by_default: true
-    on_press:
-      then:
-        - if:
-            condition:
-              lambda: 'return (id(audiofeedback).state);'
-            then:
-              - light.turn_on:
-                  id: buzzer
-                  brightness: 25%
-              - delay: 150ms
-              - light.turn_off: buzzer
-        - number.set:
-            id: image_counter
-            value: !lambda |-
-              uint32_t random_value = esp_random();
-              return (random_value % (int)id(total_images).state);
+## Green button (random)
+# Uncomment to use green button for random image. You must disable deep sleep to do so.
+#  - platform: gpio
+#    pin:
+#      number: GPIO3
+#      mode: INPUT_PULLUP
+#      inverted: true
+#    id: button_3
+#    name: "Button Green"
+#    disabled_by_default: true
+#    on_press:
+#      then:
+#        - if:
+#            condition:
+#              lambda: 'return (id(audiofeedback).state);'
+#            then:
+#              - light.turn_on:
+#                  id: buzzer
+#                  brightness: 25%
+#              - delay: 150ms
+#              - light.turn_off: buzzer
+#        - number.set:
+#            id: image_counter
+#            value: !lambda |-
+#              uint32_t random_value = esp_random();
+#              return (random_value % (int)id(total_images).state);
 
 sensor:
 # Temperature and Relative Humidity sensor configuration
-  - platform: sht4x
-    temperature:
-      name: "Temperature"
-      id: temp_sensor
-    humidity:
-      name: "Relative Humidity"
-      id: hum_sensor
+# Uncomment to provide temperature and humidity readings
+#  - platform: sht4x
+#    temperature:
+#      name: "Temperature"
+#      id: temp_sensor
+#    humidity:
+#      name: "Relative Humidity"
+#      id: hum_sensor
 # Battery voltage and Battery level sensor configuration
   - platform: adc
     pin: GPIO1
     name: "Battery Voltage"
     id: battery_voltage
-#    disabled_by_default: true
     internal: true
-    update_interval: 60s
+    update_interval: 20s
     attenuation: 12db
     filters:
 # Compensate for voltage divider
@@ -385,5 +409,26 @@ switch:
     restore_mode: RESTORE_DEFAULT_OFF
     entity_category: config
     lambda: return id(audiofeedback).state;
+# Deep sleep toggle
+  - platform: homeassistant
+    id: allow_deepsleep 
+    name: Deep sleep toggle
+    entity_id: ${ha_deep_sleep}
+    on_turn_on:
+      - deep_sleep.allow: deep_sleep_1
+    on_turn_off:
+      - deep_sleep.prevent: deep_sleep_1
   - platform: restart
     name: "Device Restart"
+  - platform: template
+    name: "Random Image"
+    id: randomimage
+    optimistic: true
+    lambda: return id(randomimage).state;
+    on_turn_on:
+      - number.set:
+          id: image_counter
+          value: !lambda |-
+            uint32_t random_value = esp_random();
+            return (random_value % (int)id(total_images).state);
+      - switch.turn_off: randomimage
