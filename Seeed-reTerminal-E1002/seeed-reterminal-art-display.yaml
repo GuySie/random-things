@@ -23,14 +23,15 @@
 ## 09. Set your deep sleep helper boolean to off, so you can configure the display after installation.
 ## 10. Install this configuration onto your Seeed reTerminal E1002 display.
 ## 11. Add the display to Home Assistant after it has been discovered.
-## 12. In Home Assistant, set the "Total Images" number of this ESPHome device to the highest numbered image you have uploaded.
+## 12. In the display's ESPHome configuration, turn on the option "Allow the device to perform Home Assistant actions."
+## 13. In Home Assistant, set the "Total Images" number of this ESPHome device to the highest numbered image you have uploaded.
 ##     Update this number if you upload additional (sequentially-numbered) images.
 ##
 ## USAGE
-## 13. Set your deep sleep helper boolean to on, so the display with automatically go through deep sleep cycles. Every time it wakes, it will load a random image.
-## 14. Press the green button to wake the display out of deep sleep, and load a random image.
-## 15. While the display is awake, press the white buttons on top of the display to go forward/backward sequentially through your images.
-## 16. While the display is awake, set the "Current Image" number of this device in Home Assistant to go to that specific numbered image.
+## 14. Set your deep sleep helper boolean to on, so the display with automatically go through deep sleep cycles. Every time it wakes, it will load a random image.
+## 15. Press the green button to wake the display out of deep sleep, and load a random image.
+## 16. While the display is awake, press the white buttons on top of the display to go forward/backward sequentially through your images.
+## 17. While the display is awake, set the "Current Image" number of this device in Home Assistant to go to that specific numbered image.
 ##
 ## To prepare images for use on this display, ensure they are:
 ## - In PNG format
@@ -50,7 +51,7 @@ substitutions:
   name: seeed-reterminal
   friendly_name: "Seeed reTerminal"
   project_name: "Guy Sie.reTerminal Art Display"
-  project_version: "0.3.0"
+  project_version: "0.4.0"
   api_key: ""
   ota_password: ""
   ap_password: ""
@@ -60,7 +61,7 @@ substitutions:
   album_folder: "reterminal/"
   max_images: 1000
   ha_deep_sleep: "input_boolean.reterminal_deep_sleep"
-  deep_sleep_run: "1min"
+  deep_sleep_run: "2min"
   deep_sleep_duration: "6h"
 
 ####################################################
@@ -71,6 +72,7 @@ esphome:
   project:
     name: ${project_name}
     version: ${project_version}
+  min_version: 2025.11.0
   on_boot:
 # Enable battery voltage measurement
     - priority: 600
@@ -316,15 +318,7 @@ spi:
 display:
   - platform: epaper_spi
     id: epaper_display
-    model: 7.3in-spectra-e6
-    cs_pin: GPIO10
-    dc_pin: GPIO11
-    reset_pin:
-      number: GPIO12
-      inverted: false
-    busy_pin:
-      number: GPIO13
-      inverted: true
+    model: Seeed-reTerminal-E1002
     update_interval: never
     auto_clear_enabled: false
 
@@ -409,26 +403,105 @@ switch:
     restore_mode: RESTORE_DEFAULT_OFF
     entity_category: config
     lambda: return id(audiofeedback).state;
-# Deep sleep toggle
+# Deep sleep toggle linked to input boolean in Home Assistant
   - platform: homeassistant
     id: allow_deepsleep 
-    name: Deep sleep toggle
+    name: "HA Deep sleep"
     entity_id: ${ha_deep_sleep}
     on_turn_on:
       - deep_sleep.allow: deep_sleep_1
+      - switch.turn_on: allow_deepsleep_toggle
     on_turn_off:
       - deep_sleep.prevent: deep_sleep_1
+      - switch.turn_off: allow_deepsleep_toggle
+  - platform: template
+    name: "Deep Sleep Toggle"
+    id: allow_deepsleep_toggle
+    optimistic: true
+    entity_category: config
+    on_turn_on:
+      - homeassistant.action:
+          action: input_boolean.turn_on
+          data:
+            entity_id: ${ha_deep_sleep}
+    on_turn_off:
+      - homeassistant.action:
+          action: input_boolean.turn_off
+          data:
+            entity_id: ${ha_deep_sleep}
+    lambda: return id(allow_deepsleep_toggle).state;
+# Restart
   - platform: restart
     name: "Device Restart"
+
+button:
   - platform: template
     name: "Random Image"
-    id: randomimage
-    optimistic: true
-    lambda: return id(randomimage).state;
-    on_turn_on:
-      - number.set:
-          id: image_counter
-          value: !lambda |-
-            uint32_t random_value = esp_random();
-            return (random_value % (int)id(total_images).state);
-      - switch.turn_off: randomimage
+    id: random_image
+    icon: "mdi:slot-machine"
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 150ms
+              - light.turn_off: buzzer
+        - number.set:
+            id: image_counter
+            value: !lambda |-
+              uint32_t random_value = esp_random();
+              return (random_value % (int)id(total_images).state);
+  - platform: template
+    name: "Previous Image"
+    id: previous_image
+    icon: "mdi:skip-previous"
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 150ms
+              - light.turn_off: buzzer
+# If currently displayed image is the first one in the folder, don't go further back
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state == 1;'
+            then:
+              - logger.log: "Image counter already at minimum image count"
+            else:
+              - number.decrement:
+                  id: image_counter
+                  cycle: false
+  - platform: template
+    name: "Next Image"
+    id: next_image
+    icon: "mdi:skip-next"
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 150ms
+              - light.turn_off: buzzer
+# If currently displayed image is the last one in the folder, don't go further forward
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state == id(total_images).state;'
+            then:
+              - logger.log: "Image counter already at total image count"
+            else:
+              - number.increment:
+                  id: image_counter
+                  cycle: false
