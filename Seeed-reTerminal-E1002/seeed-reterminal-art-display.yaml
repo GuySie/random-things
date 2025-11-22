@@ -23,15 +23,19 @@
 ## 09. Set your deep sleep helper boolean to off, so you can configure the display after installation.
 ## 10. Install this configuration onto your Seeed reTerminal E1002 display.
 ## 11. Add the display to Home Assistant after it has been discovered.
-## 12. In the display's ESPHome configuration, turn on the option "Allow the device to perform Home Assistant actions."
+## 12. In the display's ESPHome settings, turn on the option "Allow the device to perform Home Assistant actions."
 ## 13. In Home Assistant, set the "Total Images" number of this ESPHome device to the highest numbered image you have uploaded.
 ##     Update this number if you upload additional (sequentially-numbered) images.
 ##
 ## USAGE
 ## 14. Set your deep sleep helper boolean to on, so the display with automatically go through deep sleep cycles. Every time it wakes, it will load a random image.
-## 15. Press the green button to wake the display out of deep sleep, and load a random image.
-## 16. While the display is awake, press the white buttons on top of the display to go forward/backward sequentially through your images.
-## 17. While the display is awake, set the "Current Image" number of this device in Home Assistant to go to that specific numbered image.
+## 15. For ease of use, the deep sleep helper boolean is also exposed in the display's ESPHome settings.
+## 16. Press the green button to wake the display out of deep sleep (and load a random image).
+## 17. While the display is awake, you can do the following:
+## 18. Press the white buttons on top of the display to go forward/backward sequentially through your images.
+## 19. Use the buttons in the display's ESPHome settings to go to the next, previous, or a random image.
+## 20. Set the "Current Image" number of this device in Home Assistant to go to that specific numbered image.
+## 21. Turn on the Audio Feedback toggle in the display's ESPHome settings to get buzzer sounds when performing actions.
 ##
 ## To prepare images for use on this display, ensure they are:
 ## - In PNG format
@@ -51,7 +55,7 @@ substitutions:
   name: seeed-reterminal
   friendly_name: "Seeed reTerminal"
   project_name: "Guy Sie.reTerminal Art Display"
-  project_version: "0.4.0"
+  project_version: "0.5.0"
   api_key: ""
   ota_password: ""
   ap_password: ""
@@ -61,31 +65,29 @@ substitutions:
   album_folder: "reterminal/"
   max_images: 1000
   ha_deep_sleep: "input_boolean.reterminal_deep_sleep"
-  deep_sleep_run: "2min"
+  deep_sleep_run: "90s"
   deep_sleep_duration: "6h"
 
 ####################################################
 
 esphome:
+  min_version: 2025.11.0
   name: ${name}
   friendly_name: ${friendly_name}
   project:
     name: ${project_name}
     version: ${project_version}
-  min_version: 2025.11.0
   on_boot:
 # Enable battery voltage measurement
     - priority: 600
       then:
         - output.turn_on: bsp_battery_enable
-# Load random image on boot (includes waking from deep sleep)
+# Load random image on boot (and also on waking from deep sleep)
     - priority: -100
       then:
-        - number.set:
-            id: image_counter
-            value: !lambda |-
-              uint32_t random_value = esp_random();
-              return (random_value % (int)id(total_images).state);
+# Added delay to allow display more time to initialize, needed since ESPHome 2025.11
+        - delay: 5000ms
+        - button.press: random_image
 
 # Enable logging
 logger:
@@ -131,6 +133,7 @@ esp32:
 
 psram:
   mode: octal
+  speed: 80MHz
 
 i2c:
   scl: GPIO20
@@ -148,15 +151,6 @@ binary_sensor:
     disabled_by_default: true
     on_press:
       then:
-        - if:
-            condition:
-              lambda: 'return (id(audiofeedback).state);'
-            then:
-              - light.turn_on:
-                  id: buzzer
-                  brightness: 25%
-              - delay: 150ms
-              - light.turn_off: buzzer
 # If currently displayed image is the first one in the folder, don't go further back
         - if:
             condition:
@@ -167,6 +161,15 @@ binary_sensor:
               - number.decrement:
                   id: image_counter
                   cycle: false
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 150ms
+              - light.turn_off: buzzer
 
 # Right white button (forward)
   - platform: gpio
@@ -179,15 +182,6 @@ binary_sensor:
     disabled_by_default: true
     on_press:
       then:
-        - if:
-            condition:
-              lambda: 'return (id(audiofeedback).state);'
-            then:
-              - light.turn_on:
-                  id: buzzer
-                  brightness: 25%
-              - delay: 150ms
-              - light.turn_off: buzzer
 # If currently displayed image is the last one in the folder, don't go further forward
         - if:
             condition:
@@ -198,6 +192,15 @@ binary_sensor:
               - number.increment:
                   id: image_counter
                   cycle: false
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 150ms
+              - light.turn_off: buzzer
 
 ## Green button (random)
 # Uncomment to use green button for random image. You must disable deep sleep to do so.
@@ -211,6 +214,11 @@ binary_sensor:
 #    disabled_by_default: true
 #    on_press:
 #      then:
+#        - number.set:
+#            id: image_counter
+#            value: !lambda |-
+#              uint32_t random_value = esp_random();
+#              return (random_value % (int)id(total_images).state);
 #        - if:
 #            condition:
 #              lambda: 'return (id(audiofeedback).state);'
@@ -220,11 +228,6 @@ binary_sensor:
 #                  brightness: 25%
 #              - delay: 150ms
 #              - light.turn_off: buzzer
-#        - number.set:
-#            id: image_counter
-#            value: !lambda |-
-#              uint32_t random_value = esp_random();
-#              return (random_value % (int)id(total_images).state);
 
 sensor:
 # Temperature and Relative Humidity sensor configuration
@@ -355,6 +358,7 @@ number:
     min_value: 1
     max_value: ${max_images}
     step: 1
+    restore_value: true
     initial_value: 1
     optimistic: true
     mode: box
@@ -403,7 +407,7 @@ switch:
     restore_mode: RESTORE_DEFAULT_OFF
     entity_category: config
     lambda: return id(audiofeedback).state;
-# Deep sleep toggle linked to input boolean in Home Assistant
+# Deep sleep behavior linked to input boolean in Home Assistant
   - platform: homeassistant
     id: allow_deepsleep 
     name: "HA Deep sleep"
@@ -414,6 +418,8 @@ switch:
     on_turn_off:
       - deep_sleep.prevent: deep_sleep_1
       - switch.turn_off: allow_deepsleep_toggle
+# Expose switch to let user toggle the deep sleep input boolean from the device
+# For this to work, the option "Allow the device to perform Home Assistant actions" must have been enabled
   - platform: template
     name: "Deep Sleep Toggle"
     id: allow_deepsleep_toggle
@@ -441,6 +447,11 @@ button:
     icon: "mdi:slot-machine"
     on_press:
       then:
+        - number.set:
+            id: image_counter
+            value: !lambda |-
+              uint32_t random_value = esp_random();
+              return (random_value % (int)id(total_images).state);
         - if:
             condition:
               lambda: 'return (id(audiofeedback).state);'
@@ -450,26 +461,12 @@ button:
                   brightness: 25%
               - delay: 150ms
               - light.turn_off: buzzer
-        - number.set:
-            id: image_counter
-            value: !lambda |-
-              uint32_t random_value = esp_random();
-              return (random_value % (int)id(total_images).state);
   - platform: template
     name: "Previous Image"
     id: previous_image
     icon: "mdi:skip-previous"
     on_press:
       then:
-        - if:
-            condition:
-              lambda: 'return (id(audiofeedback).state);'
-            then:
-              - light.turn_on:
-                  id: buzzer
-                  brightness: 25%
-              - delay: 150ms
-              - light.turn_off: buzzer
 # If currently displayed image is the first one in the folder, don't go further back
         - if:
             condition:
@@ -480,12 +477,6 @@ button:
               - number.decrement:
                   id: image_counter
                   cycle: false
-  - platform: template
-    name: "Next Image"
-    id: next_image
-    icon: "mdi:skip-next"
-    on_press:
-      then:
         - if:
             condition:
               lambda: 'return (id(audiofeedback).state);'
@@ -495,6 +486,12 @@ button:
                   brightness: 25%
               - delay: 150ms
               - light.turn_off: buzzer
+  - platform: template
+    name: "Next Image"
+    id: next_image
+    icon: "mdi:skip-next"
+    on_press:
+      then:
 # If currently displayed image is the last one in the folder, don't go further forward
         - if:
             condition:
@@ -505,3 +502,12 @@ button:
               - number.increment:
                   id: image_counter
                   cycle: false
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 150ms
+              - light.turn_off: buzzer
