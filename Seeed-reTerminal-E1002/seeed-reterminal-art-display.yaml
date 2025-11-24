@@ -13,29 +13,30 @@
 ## 03. If you want to store the images you will display in a subfolder, set substitution album_folder to the name of this folder and add a trailing slash. 
 ##     Change to "" if no subfolder is used.
 ## 04. Set substitution max_images to the maximum amount of images you want to use in the future without having to update this configuration again.
-## 05. Create a helper boolean in Home Assistant that will control whether this frame goes into deep sleep. Set substitution ha_deep_sleep to this helper's entity name.
-## 06. Set substitution deep_sleep_run to the amount of time the frame should stay awake. By default this is set to 1 minute, which is enough to load a random image.
-## 07. Set substitution deep_sleep_duration to the amount of time the frame should sleep. By default this is set to 6 hours, so the frame refreshes 4 times each day.
-## 08. Upload properly prepared PNG images to the (sub)folder you configured. Number them sequentially, starting at 1.png, followed by 2.png, etc.
+## 05. Set substitution rotation to 0 if you want to use the device in landscape mode, or 270 if you want to use it in portrait mode.
+## 06. Create a helper boolean in Home Assistant that will control whether this frame goes into deep sleep. Set substitution ha_deep_sleep to this helper's entity name.
+## 07. Set substitution deep_sleep_run to the amount of time the frame should stay awake. By default this is set to 90 seconds, which is enough to load a random image.
+## 08. Set substitution deep_sleep_duration to the amount of time the frame should sleep. By default this is set to 6 hours, so the frame refreshes 4 times each day.
+## 09. Upload properly prepared PNG images to the (sub)folder you configured. Number them sequentially, starting at 1.png, followed by 2.png, etc.
 ##     This configuration assumes a continuous set of sequentially ascending numbered files, with no gaps.
 ##
 ## INSTALLATION
-## 09. Set your deep sleep helper boolean to off, so you can configure the display after installation.
-## 10. Install this configuration onto your Seeed reTerminal E1002 display.
-## 11. Add the display to Home Assistant after it has been discovered.
-## 12. In the display's ESPHome settings, turn on the option "Allow the device to perform Home Assistant actions."
-## 13. In Home Assistant, set the "Total Images" number of this ESPHome device to the highest numbered image you have uploaded.
+## 10. Set your deep sleep helper boolean to off, so you can configure the display after installation.
+## 11. Install this configuration onto your Seeed reTerminal E1002 display.
+## 12. Add the display to Home Assistant after it has been discovered.
+## 13. In the display's ESPHome settings, turn on the option "Allow the device to perform Home Assistant actions."
+## 14. In Home Assistant, set the "Total Images" number of this ESPHome device to the highest numbered image you have uploaded.
 ##     Update this number if you upload additional (sequentially-numbered) images.
 ##
 ## USAGE
-## 14. Set your deep sleep helper boolean to on, so the display with automatically go through deep sleep cycles. Every time it wakes, it will load a random image.
-## 15. For ease of use, the deep sleep helper boolean is also exposed in the display's ESPHome settings.
-## 16. Press the green button to wake the display out of deep sleep (and load a random image).
-## 17. While the display is awake, you can do the following:
-## 18. Press the white buttons on top of the display to go forward/backward sequentially through your images.
-## 19. Use the buttons in the display's ESPHome settings to go to the next, previous, or a random image.
-## 20. Set the "Current Image" number of this device in Home Assistant to go to that specific numbered image.
-## 21. Turn on the Audio Feedback toggle in the display's ESPHome settings to get buzzer sounds when performing actions.
+## 15. Set your deep sleep helper boolean to on, so the display with automatically go through deep sleep cycles. Every time it wakes, it will load a random image.
+## 16. For ease of use, the deep sleep helper boolean is also exposed in the display's ESPHome settings.
+## 17. Press the green button to wake the display out of deep sleep (and load a random image).
+## 18. While the display is awake, you can do the following:
+## 19. Press the white buttons on top of the display to go forward/backward sequentially through your images.
+## 20. Use the buttons in the display's ESPHome settings to go to the next, previous, or a random image.
+## 21. Set the "Current Image" number of this device in Home Assistant to go to that specific numbered image.
+## 22. Turn on the Audio Feedback toggle in the display's ESPHome settings to get buzzer sounds when performing actions.
 ##
 ## To prepare images for use on this display, ensure they are:
 ## - In PNG format
@@ -55,7 +56,7 @@ substitutions:
   name: seeed-reterminal
   friendly_name: "Seeed reTerminal"
   project_name: "Guy Sie.reTerminal Art Display"
-  project_version: "0.5.0"
+  project_version: "0.6.0"
   api_key: ""
   ota_password: ""
   ap_password: ""
@@ -64,6 +65,7 @@ substitutions:
   ha_www_url: "http://homeassistant.local:8123/local/"
   album_folder: "reterminal/"
   max_images: 1000
+  rotation: 0
   ha_deep_sleep: "input_boolean.reterminal_deep_sleep"
   deep_sleep_run: "90s"
   deep_sleep_duration: "6h"
@@ -324,6 +326,7 @@ display:
     model: Seeed-reTerminal-E1002
     update_interval: never
     auto_clear_enabled: false
+    rotation: ${rotation}
 
 lvgl:
   buffer_size: 12%
@@ -388,7 +391,6 @@ online_image:
     id: onlineimage
     type: rgb565
     format: png
-    resize: 800x480
 # Display component is always updated here once online_image has finished downloading
     on_download_finished:
       - lvgl.image.update:
