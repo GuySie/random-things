@@ -1,0 +1,13 @@
+{
+  "exceptions": {
+    "no_images_in_folder": {
+      "message": "No images were found in the selected folder."
+    },
+    "image_download_failed": {
+      "message": "Failed to download the image from the provided URL."
+    },
+    "no_local_media_dir": {
+      "message": "No local media directory is configured in Home Assistant. Add a media_dirs entry to your configuration.yaml."
+    }
+  }
+}

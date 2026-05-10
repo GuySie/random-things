@@ -1,0 +1,11 @@
+{
+  "domain": "opendisplay_extended",
+  "name": "OpenDisplay Extended",
+  "codeowners": [],
+  "config_flow": false,
+  "dependencies": ["opendisplay", "media_source"],
+  "documentation": "",
+  "integration_type": "service",
+  "requirements": [],
+  "version": "1.0.0"
+}

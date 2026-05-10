@@ -1,0 +1,204 @@
+upload_random_image:
+  name: Upload random image
+  description: Picks a random image from a media folder and uploads it to an OpenDisplay device.
+  fields:
+    device_id:
+      name: Device
+      description: The OpenDisplay device to upload the image to.
+      required: true
+      selector:
+        device:
+          integration: opendisplay
+    folder:
+      name: Target folder
+      description: >-
+        Select any image inside the folder you want to randomize from.
+        A random image from the same folder will be displayed.
+      required: true
+      selector:
+        media:
+          accept:
+            - image/*
+    advanced_options:
+      name: Advanced options
+      collapsed: true
+      fields:
+        rotation:
+          name: Rotation
+          description: The rotation angle in degrees, applied clockwise.
+          required: false
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 270
+              step: 90
+              mode: slider
+        dither_mode:
+          name: Dither mode
+          description: The dithering algorithm to use for converting the image to the display's color palette.
+          required: false
+          default: "burkes"
+          selector:
+            select:
+              options:
+                - value: "none"
+                  label: "None"
+                - value: "burkes"
+                  label: "Burkes"
+                - value: "ordered"
+                  label: "Ordered"
+                - value: "floyd_steinberg"
+                  label: "Floyd-Steinberg"
+                - value: "atkinson"
+                  label: "Atkinson"
+                - value: "stucki"
+                  label: "Stucki"
+                - value: "sierra"
+                  label: "Sierra"
+                - value: "sierra_lite"
+                  label: "Sierra Lite"
+                - value: "jarvis_judice_ninke"
+                  label: "Jarvis, Judice & Ninke"
+        refresh_mode:
+          name: Refresh mode
+          description: >-
+            The display refresh mode. Full refresh clears ghosting but is slower.
+            Fast refresh is not supported on all displays.
+          required: false
+          default: "full"
+          selector:
+            select:
+              options:
+                - value: "full"
+                  label: "Full"
+                - value: "fast"
+                  label: "Fast"
+        fit_mode:
+          name: Fit mode
+          description: How the image is fitted to the display dimensions.
+          required: false
+          default: "contain"
+          selector:
+            select:
+              options:
+                - value: "stretch"
+                  label: "Stretch"
+                - value: "contain"
+                  label: "Contain"
+                - value: "cover"
+                  label: "Cover"
+                - value: "crop"
+                  label: "Crop"
+        tone_compression:
+          name: Tone compression
+          description: Dynamic range compression strength. Leave empty for automatic.
+          required: false
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 1
+              mode: slider
+              unit_of_measurement: "%"
+
+upload_image_from_url:
+  name: Upload image from URL
+  description: Downloads an image from an HTTP/HTTPS URL and uploads it to an OpenDisplay device.
+  fields:
+    device_id:
+      name: Device
+      description: The OpenDisplay device to upload the image to.
+      required: true
+      selector:
+        device:
+          integration: opendisplay
+    image_url:
+      name: Image URL
+      description: The HTTP or HTTPS URL of the image to upload.
+      required: true
+      selector:
+        text:
+          type: url
+    advanced_options:
+      name: Advanced options
+      collapsed: true
+      fields:
+        rotation:
+          name: Rotation
+          description: The rotation angle in degrees, applied clockwise.
+          required: false
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 270
+              step: 90
+              mode: slider
+        dither_mode:
+          name: Dither mode
+          description: The dithering algorithm to use for converting the image to the display's color palette.
+          required: false
+          default: "burkes"
+          selector:
+            select:
+              options:
+                - value: "none"
+                  label: "None"
+                - value: "burkes"
+                  label: "Burkes"
+                - value: "ordered"
+                  label: "Ordered"
+                - value: "floyd_steinberg"
+                  label: "Floyd-Steinberg"
+                - value: "atkinson"
+                  label: "Atkinson"
+                - value: "stucki"
+                  label: "Stucki"
+                - value: "sierra"
+                  label: "Sierra"
+                - value: "sierra_lite"
+                  label: "Sierra Lite"
+                - value: "jarvis_judice_ninke"
+                  label: "Jarvis, Judice & Ninke"
+        refresh_mode:
+          name: Refresh mode
+          description: >-
+            The display refresh mode. Full refresh clears ghosting but is slower.
+            Fast refresh is not supported on all displays.
+          required: false
+          default: "full"
+          selector:
+            select:
+              options:
+                - value: "full"
+                  label: "Full"
+                - value: "fast"
+                  label: "Fast"
+        fit_mode:
+          name: Fit mode
+          description: How the image is fitted to the display dimensions.
+          required: false
+          default: "contain"
+          selector:
+            select:
+              options:
+                - value: "stretch"
+                  label: "Stretch"
+                - value: "contain"
+                  label: "Contain"
+                - value: "cover"
+                  label: "Cover"
+                - value: "crop"
+                  label: "Crop"
+        tone_compression:
+          name: Tone compression
+          description: Dynamic range compression strength. Leave empty for automatic.
+          required: false
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 1
+              mode: slider
+              unit_of_measurement: "%"
