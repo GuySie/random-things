@@ -1,0 +1,486 @@
+####################################################
+## Seeed reTerminal Art Display
+##
+## Configuration to use a Seeed reTerminal E1003 e-ink display as a digital art frame.
+## By default, the display will wake up once every 6 hours to display a new random image.
+##
+## HOW TO USE
+##
+## PREPARATION
+## 01. Set substitutions for names, keys, passwords, etc.
+## 02. Set substitution ha_www_url to the publicly accessible URL of your www folder, with trailing slash. This default should work for most people.
+##     For more information, check: https://www.home-assistant.io/integrations/http/#hosting-files
+## 03. If you want to store the images you will display in a subfolder, set substitution album_folder to the name of this folder and add a trailing slash.
+##     Change to "" if no subfolder is used.
+## 04. Set substitution max_images to the maximum amount of images you want to use in the future without having to update this configuration again.
+## 05. Set substitution rotation to 0 if you want to use the device in landscape mode, or 270 if you want to use it in portrait mode.
+## 06. Create a helper boolean in Home Assistant that will control whether this frame goes into deep sleep. Set substitution ha_deep_sleep to this helper's entity name.
+## 07. Set substitution deep_sleep_run to the amount of time the frame should stay awake. By default this is set to 1 minute, which is enough to load a random image.
+## 08. Set substitution deep_sleep_duration to the amount of time the frame should sleep. By default this is set to 6 hours, so the frame refreshes 4 times each day.
+## 09. Upload properly prepared PNG images to the (sub)folder you configured. Number them sequentially, starting at 1.png, followed by 2.png, etc.
+##     This configuration assumes a continuous set of sequentially ascending numbered files, with no gaps.
+##
+## INSTALLATION
+## 10. Set your deep sleep helper boolean to off, so you can configure the display after installation.
+## 11. Install this configuration onto your Seeed reTerminal E1003 display.
+## 12. Add the display to Home Assistant after it has been discovered.
+## 13. In the display's ESPHome settings, turn on the option "Allow the device to perform Home Assistant actions."
+## 14. In Home Assistant, set the "Total Images" number of this ESPHome device to the highest numbered image you have uploaded.
+##     Update this number if you upload additional (sequentially-numbered) images.
+##
+## USAGE
+## 15. Set your deep sleep helper boolean to on, so the display with automatically go through deep sleep cycles. Every time it wakes, it will load a random image.
+## 16. For ease of use, the deep sleep helper boolean is also exposed in the display's ESPHome settings.
+## 17. Press the green button to wake the display out of deep sleep (and load a random image).
+## 18. While the display is awake, you can do the following:
+## 19. Press the white buttons on top of the display to go forward/backward sequentially through your images.
+## 20. Use the buttons in the display's ESPHome settings to go to the next, previous, or a random image.
+## 21. Set the "Current Image" number of this device in Home Assistant to go to that specific numbered image.
+## 22. Turn on the Audio Feedback toggle in the display's ESPHome settings to get buzzer sounds when performing actions.
+##
+## To prepare images for use on this display, ensure they are:
+## - In PNG format
+## - In 1404x1872 pixel resolution for portrait mode (rotation: 270), or 1872x1404 for landscape (rotation: 0)
+## - In 16-level grayscale (the IT8951 controller in this display renders 4bpp grayscale)
+##
+## By Guy Sie (https://github.com/guysie)
+##
+####################################################
+
+substitutions:
+  name: seeed-grayscale
+  friendly_name: "Seeed reTerminal E1003"
+  project_name: "Guy Sie.reTerminal E1003 Art Display"
+  project_version: "0.5.0"
+  api_key: ""
+  ota_password: ""
+  ap_password: ""
+  wifi_ssid: !secret wifi_ssid
+  wifi_password: !secret wifi_password
+  ha_www_url: "http://homeassistant.local:8123/local/"
+  album_folder: "reterminal/"
+  max_images: 1000
+  rotation: 0
+  ha_deep_sleep: "input_boolean.reterminal_deep_sleep"
+  deep_sleep_run: "90s"
+  deep_sleep_duration: "6h"
+
+####################################################
+
+esphome:
+  min_version: 2025.11.0
+  name: ${name}
+  friendly_name: ${friendly_name}
+  project:
+    name: ${project_name}
+    version: ${project_version}
+  on_boot:
+# Enable battery voltage measurement
+    - priority: 600
+      then:
+        - output.turn_on: bsp_battery_enable
+# Load random image on boot (and also on waking from deep sleep)
+    - priority: -100
+      then:
+        - delay: 5000ms
+        - button.press: random_image
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: ${api_key}
+
+ota:
+  - platform: esphome
+    password: ${ota_password}
+
+wifi:
+  ssid: ${wifi_ssid}
+  password: ${wifi_password}
+# Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Seeed-Reterminal"
+    password: ${ap_password}
+
+captive_portal:
+
+http_request:
+
+
+## Deep sleep configuration
+# Comment out to disable deep sleep. This lets you use the green button as a control instead
+deep_sleep:
+  id: deep_sleep_1
+  run_duration: ${deep_sleep_run}
+  sleep_duration: ${deep_sleep_duration}
+# Green button interrupts deep sleep
+  wakeup_pin: GPIO3
+  wakeup_pin_mode: INVERT_WAKEUP
+
+
+## Hardware configuration (ESP, buttons, sensors, buzzer, LED)
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: arduino
+
+psram:
+  mode: octal
+
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [it8951_reterminal_e1003]
+
+binary_sensor:
+# Left white button (back)
+  - platform: gpio
+    pin:
+      number: GPIO5
+      mode: INPUT_PULLUP
+      inverted: true
+    id: button_1
+    name: "Button Left"
+    disabled_by_default: true
+    on_press:
+      then:
+# If currently displayed image is the first one in the folder, don't go further back
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state == 1;'
+            then:
+              - logger.log: "Image counter already at minimum image count"
+            else:
+              - number.decrement:
+                  id: image_counter
+                  cycle: false
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 150ms
+              - light.turn_off: buzzer
+
+# Right white button (forward)
+  - platform: gpio
+    pin:
+      number: GPIO4
+      mode: INPUT_PULLUP
+      inverted: true
+    id: button_2
+    name: "Button Right"
+    disabled_by_default: true
+    on_press:
+      then:
+# If currently displayed image is the last one in the folder, don't go further forward
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state == id(total_images).state;'
+            then:
+              - logger.log: "Image counter already at total image count"
+            else:
+              - number.increment:
+                  id: image_counter
+                  cycle: false
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 150ms
+              - light.turn_off: buzzer
+
+## Green button (random)
+# Uncomment to use green button for random image. You must disable deep sleep to do so.
+#  - platform: gpio
+#    pin:
+#      number: GPIO3
+#      mode: INPUT_PULLUP
+#      inverted: true
+#    id: button_3
+#    name: "Button Green"
+#    disabled_by_default: true
+#    on_press:
+#      then:
+#        - number.set:
+#            id: image_counter
+#            value: !lambda |-
+#              uint32_t random_value = esp_random();
+#              return (random_value % (int)id(total_images).state) + 1;
+#        - if:
+#            condition:
+#              lambda: 'return (id(audiofeedback).state);'
+#            then:
+#              - light.turn_on:
+#                  id: buzzer
+#                  brightness: 25%
+#              - delay: 150ms
+#              - light.turn_off: buzzer
+
+sensor:
+# Battery voltage and Battery level sensor configuration
+  - platform: adc
+    pin: GPIO1
+    name: "Battery Voltage"
+    id: battery_voltage
+    internal: true
+    update_interval: 20s
+    attenuation: 12db
+    filters:
+# Compensate for voltage divider
+      - multiply: 2.0
+  - platform: template
+    name: "Battery Level"
+    id: battery_level
+    entity_category: diagnostic
+    unit_of_measurement: "%"
+    icon: "mdi:battery"
+    device_class: battery
+    state_class: measurement
+    lambda: 'return id(battery_voltage).state;'
+    update_interval: 10s
+    filters:
+      - calibrate_linear:
+          - 4.15 -> 100.0
+          - 3.96 -> 90.0
+          - 3.91 -> 80.0
+          - 3.85 -> 70.0
+          - 3.80 -> 60.0
+          - 3.75 -> 50.0
+          - 3.68 -> 40.0
+          - 3.58 -> 30.0
+          - 3.49 -> 20.0
+          - 3.41 -> 10.0
+          - 3.30 -> 5.0
+          - 3.27 -> 0.0
+      - clamp:
+          min_value: 0
+          max_value: 100
+
+output:
+# Green side LED GPIO configuration
+  - platform: gpio
+    pin: GPIO16
+    id: led_output
+    inverted: true
+# Battery voltage measurement GPIO configuration
+  - platform: gpio
+    pin: GPIO40
+    id: bsp_battery_enable
+# Buzzer configuration (to control the buzzer pwm, pretend it's an LED light)
+  - platform: ledc
+    pin: GPIO45
+    id: buzzer_pwm
+# The frequency determines the pitch of the buzzer's sound
+    frequency: 100Hz
+
+light:
+# Expose green side LED to Home Assistant
+  - platform: binary
+    name: "Onboard LED"
+    output: led_output
+    id: onboard_led
+    icon: mdi:led-outline
+    disabled_by_default: true
+# Create a fake light entity to control the buzzer. The 'brightness' of the light controls the buzzer's volume
+  - platform: monochromatic
+    output: buzzer_pwm
+    name: "Buzzer"
+    id: buzzer
+    icon: mdi:volume-high
+    disabled_by_default: true
+    default_transition_length: 0s
+
+
+## E-ink display configuration (display)
+display:
+  - platform: it8951_reterminal_e1003
+    id: epaper_display
+    vcom: 1400
+    update_interval: never
+    auto_clear_enabled: false
+    rotation: ${rotation}
+    lambda: |-
+      it.image(0, 0, id(onlineimage));
+
+
+## Image variables configuration
+number:
+# Total number of images in the folder; must match highest number filename in the folder
+  - platform: template
+    name: "Total Images"
+    id: total_images
+    icon: mdi:camera-burst
+    min_value: 1
+    max_value: ${max_images}
+    step: 1
+    restore_value: true
+    initial_value: 10
+    optimistic: true
+    mode: box
+# Current image being displayed
+  - platform: template
+    name: "Current Image"
+    id: image_counter
+    icon: mdi:image-frame
+    min_value: 1
+    max_value: ${max_images}
+    step: 1
+    restore_value: true
+    initial_value: 1
+    optimistic: true
+    mode: box
+    on_value:
+      then:
+# If current image is set to a file that can not exist, instead set to the highest-numbered file that can exist
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state > id(total_images).state;'
+            then:
+              - number.set:
+                  id: image_counter
+                  value: !lambda 'return id(total_images).state;'
+            else:
+# URL of image to display is always updated here, this causes online_image to start downloading
+              - online_image.set_url:
+                  id: onlineimage
+                  url: !lambda |-
+                    char urlstring[254];
+                    sprintf(urlstring, "${ha_www_url}${album_folder}%d%s", (int)id(image_counter).state, ".png");
+                    return (urlstring);
+
+
+## Online image configuration
+online_image:
+  - url: https://placehold.co/10x10/white/white/png
+    id: onlineimage
+    type: GRAYSCALE
+    format: png
+# Display component is always updated here once online_image has finished downloading
+    on_download_finished:
+      - component.update: epaper_display
+
+
+## Switch configuration
+switch:
+# Expose switch to let user turn on/off button feedback sounds
+  - platform: template
+    name: "Audio Feedback"
+    id: audiofeedback
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+    lambda: return id(audiofeedback).state;
+# Deep sleep behavior linked to input boolean in Home Assistant
+  - platform: homeassistant
+    id: allow_deepsleep 
+    name: "HA Deep sleep"
+    entity_id: ${ha_deep_sleep}
+    on_turn_on:
+      - deep_sleep.allow: deep_sleep_1
+      - switch.turn_on: allow_deepsleep_toggle
+    on_turn_off:
+      - deep_sleep.prevent: deep_sleep_1
+      - switch.turn_off: allow_deepsleep_toggle
+# Expose switch to let user toggle the deep sleep input boolean from the device
+# For this to work, the option "Allow the device to perform Home Assistant actions" must have been enabled
+  - platform: template
+    name: "Deep Sleep Toggle"
+    id: allow_deepsleep_toggle
+    optimistic: true
+    entity_category: config
+    on_turn_on:
+      - homeassistant.action:
+          action: input_boolean.turn_on
+          data:
+            entity_id: ${ha_deep_sleep}
+    on_turn_off:
+      - homeassistant.action:
+          action: input_boolean.turn_off
+          data:
+            entity_id: ${ha_deep_sleep}
+    lambda: return id(allow_deepsleep_toggle).state;
+# Restart
+  - platform: restart
+    name: "Device Restart"
+
+button:
+  - platform: template
+    name: "Random Image"
+    id: random_image
+    icon: "mdi:slot-machine"
+    on_press:
+      then:
+        - number.set:
+            id: image_counter
+            value: !lambda |-
+              uint32_t random_value = esp_random();
+              return (random_value % (int)id(total_images).state) + 1;
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 150ms
+              - light.turn_off: buzzer
+  - platform: template
+    name: "Previous Image"
+    id: previous_image
+    icon: "mdi:skip-previous"
+    on_press:
+      then:
+# If currently displayed image is the first one in the folder, don't go further back
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state == 1;'
+            then:
+              - logger.log: "Image counter already at minimum image count"
+            else:
+              - number.decrement:
+                  id: image_counter
+                  cycle: false
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 150ms
+              - light.turn_off: buzzer
+  - platform: template
+    name: "Next Image"
+    id: next_image
+    icon: "mdi:skip-next"
+    on_press:
+      then:
+# If currently displayed image is the last one in the folder, don't go further forward
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state == id(total_images).state;'
+            then:
+              - logger.log: "Image counter already at total image count"
+            else:
+              - number.increment:
+                  id: image_counter
+                  cycle: false
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 150ms
+              - light.turn_off: buzzer
