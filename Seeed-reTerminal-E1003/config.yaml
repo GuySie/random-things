@@ -79,11 +79,6 @@ esphome:
     - priority: 600
       then:
         - output.turn_on: bsp_battery_enable
-# Load random image on boot (and also on waking from deep sleep)
-    - priority: -100
-      then:
-        - delay: 5000ms
-        - button.press: random_image
 
 # Enable logging
 logger:
@@ -100,6 +95,8 @@ ota:
 wifi:
   ssid: ${wifi_ssid}
   password: ${wifi_password}
+  on_connect:
+    - button.press: random_image
 # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
     ssid: "Seeed-Reterminal"
@@ -108,6 +105,7 @@ wifi:
 captive_portal:
 
 http_request:
+  buffer_size_rx: 8192
 
 
 ## Deep sleep configuration
@@ -370,6 +368,11 @@ online_image:
 # Display component is always updated here once online_image has finished downloading
     on_download_finished:
       - component.update: epaper_display
+    on_error:
+      - logger.log:
+          level: WARN
+          format: "Failed to download image %d"
+          args: ["(int)id(image_counter).state"]
 
 
 ## Switch configuration
@@ -414,6 +417,7 @@ switch:
 # Restart
   - platform: restart
     name: "Device Restart"
+    entity_category: config
 
 button:
   - platform: template
