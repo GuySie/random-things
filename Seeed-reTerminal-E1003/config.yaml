@@ -15,8 +15,9 @@
 ## 04. Set substitution max_images to the maximum amount of images you want to use in the future without having to update this configuration again.
 ## 05. Set substitution rotation to 0 if you want to use the device in landscape mode, or 270 if you want to use it in portrait mode.
 ## 06. Create a helper boolean in Home Assistant that will control whether this frame goes into deep sleep. Set substitution ha_deep_sleep to this helper's entity name.
-## 07. Set substitution deep_sleep_run to the amount of time the frame should stay awake. By default this is set to 1 minute, which is enough to load a random image.
-## 08. Set substitution deep_sleep_duration to the amount of time the frame should sleep. By default this is set to 6 hours, so the frame refreshes 4 times each day.
+## 07. Set substitution deep_sleep_run to the amount of time the frame should stay awake. By default this is set to 2 minutes, which is enough to load a random image.
+## 08. Set substitution rtc_refresh_interval_hours to how often (in whole hours) the frame should refresh, aligned to clock boundaries (e.g. 1 = every hour at :00, 6 = at 00:00/06:00/12:00/18:00).
+##     Set rtc_active_hour_start and rtc_active_hour_end to define the window during which refreshes are allowed. Wakeups outside this window are skipped to the next boundary inside it.
 ## 09. Upload properly prepared PNG images to the (sub)folder you configured. Number them sequentially, starting at 1.png, followed by 2.png, etc.
 ##     This configuration assumes a continuous set of sequentially ascending numbered files, with no gaps.
 ##
@@ -51,7 +52,7 @@ substitutions:
   name: seeed-grayscale
   friendly_name: "Seeed reTerminal E1003"
   project_name: "Guy Sie.reTerminal E1003 Art Display"
-  project_version: "0.5.0"
+  project_version: "0.6.0"
   api_key: ""
   ota_password: ""
   ap_password: ""
@@ -62,8 +63,10 @@ substitutions:
   max_images: 1000
   rotation: 0
   ha_deep_sleep: "input_boolean.reterminal_deep_sleep"
-  deep_sleep_run: "90s"
-  deep_sleep_duration: "6h"
+  deep_sleep_run: "120s"
+  rtc_refresh_interval_hours: "1"   # wake every N clock-aligned hours
+  rtc_active_hour_start: "7"        # first hour of active window (inclusive, 0-23)
+  rtc_active_hour_end: "23"         # last hour of active window (inclusive, 0-23)
 
 ####################################################
 
@@ -79,6 +82,38 @@ esphome:
     - priority: 600
       then:
         - output.turn_on: bsp_battery_enable
+# Compute clock-aligned sleep duration from RTC
+    - priority: 100
+      then:
+        - lambda: |-
+            int interval_h   = ${rtc_refresh_interval_hours};
+            int active_start = ${rtc_active_hour_start};
+            int active_end   = ${rtc_active_hour_end};
+
+            auto t = id(rtc_time).now();
+            if (!t.is_valid()) {
+              id(deep_sleep_1).set_sleep_duration((uint32_t)interval_h * 3600000UL);
+              ESP_LOGW("rtc_sleep", "RTC not set, sleeping %d h", interval_h);
+              return;
+            }
+
+            int now_secs      = t.hour * 3600 + t.minute * 60 + t.second;
+            int interval_secs = interval_h * 3600;
+
+            // Next clock-aligned boundary (always at least 1 full interval from now)
+            int next_secs = ((now_secs / interval_secs) + 1) * interval_secs;
+
+            // Advance past quiet hours (cap at 48 iterations)
+            for (int i = 0; i < 48; i++) {
+              int h = (next_secs / 3600) % 24;
+              if (h >= active_start && h <= active_end) break;
+              next_secs += interval_secs;
+            }
+
+            uint32_t sleep_ms = (uint32_t)(next_secs - now_secs) * 1000UL;
+            id(deep_sleep_1).set_sleep_duration(sleep_ms);
+            ESP_LOGI("rtc_sleep", "Next wake in %u s at hour %d",
+                     (next_secs - now_secs), (next_secs / 3600) % 24);
 
 # Enable logging
 logger:
@@ -113,7 +148,7 @@ http_request:
 deep_sleep:
   id: deep_sleep_1
   run_duration: ${deep_sleep_run}
-  sleep_duration: ${deep_sleep_duration}
+# sleep_duration is computed dynamically from RTC on each boot (see on_boot lambda above)
 # Green button interrupts deep sleep
   wakeup_pin: GPIO3
   wakeup_pin_mode: INVERT_WAKEUP
@@ -135,8 +170,23 @@ external_components:
     components: [it8951_reterminal_e1003]
 
 i2c:
+  id: i2c0
   sda: GPIO19
   scl: GPIO20
+
+time:
+  - platform: pcf8563
+    id: rtc_time
+    address: 0x51
+    i2c_id: i2c0
+    update_interval: never
+
+  - platform: homeassistant
+    id: ha_time
+    on_time_sync:
+      then:
+        - pcf8563.write_time:
+            id: rtc_time
 
 binary_sensor:
 # Left white button (back)
