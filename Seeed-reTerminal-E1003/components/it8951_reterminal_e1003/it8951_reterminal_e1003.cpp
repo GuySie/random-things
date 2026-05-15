@@ -10,7 +10,7 @@ namespace it8951_reterminal_e1003 {
 
 static const char *const TAG = "it8951_e1003";
 static const uint32_t IT8951_SPI_PROBE_FREQUENCY = 1000000;
-static const uint32_t IT8951_SPI_WRITE_FREQUENCY = 40000000;
+static const uint32_t IT8951_SPI_WRITE_FREQUENCY = 20000000;  // IT8951DX max is 24 MHz; 20 MHz (80/4) is the nearest safe ESP32-S3 divisor
 static const uint32_t IT8951_SPI_READ_FREQUENCY = 4000000;
 
 void IT8951ReTerminalE1003Display::spi_send_word_(uint16_t word) { SPI.transfer16(word); }
@@ -334,9 +334,6 @@ void IT8951ReTerminalE1003Display::setup() {
            this->img_buf_addr_);
 
   this->it8951_write_reg_(I80CPCR, 0x0001);
-  this->lcd_write_cmd_code_(USDEF_I80_CMD_TEMP);
-  this->lcd_write_data_(0x0001);
-  this->lcd_write_data_(23);
 
   this->spi_frequency_ = IT8951_SPI_WRITE_FREQUENCY;
   this->spi_read_frequency_ = IT8951_SPI_READ_FREQUENCY;
@@ -458,6 +455,11 @@ void IT8951ReTerminalE1003Display::update() {
 
   this->wait_for_display_ready_();
 
+  this->lcd_write_cmd_code_(USDEF_I80_CMD_TEMP);
+  this->lcd_write_data_(0x0001);  // Force Set from host
+  this->lcd_write_data_(static_cast<uint16_t>(this->temperature_));
+  ESP_LOGD(TAG, "Temperature set to %d°C for waveform selection", this->temperature_);
+
   this->set_img_buf_base_addr_(this->img_buf_addr_);
   if (use_1bpp) {
     const uint16_t one_bpp_width_bytes = w / 8;
@@ -498,6 +500,7 @@ void IT8951ReTerminalE1003Display::dump_config() {
   ESP_LOGCONFIG(TAG, "  SPI Write Frequency: %u Hz", this->spi_frequency_);
   ESP_LOGCONFIG(TAG, "  SPI Read Frequency: %u Hz", this->spi_read_frequency_);
   ESP_LOGCONFIG(TAG, "  VCOM: %u", this->vcom_);
+  ESP_LOGCONFIG(TAG, "  Temperature: %d°C", this->temperature_);
   ESP_LOGCONFIG(TAG, "  VCOM selector: 0x%04X", this->vcom_write_selector_);
   ESP_LOGCONFIG(TAG, "  Probe path: %s", this->probe_path_ != nullptr ? this->probe_path_ : "none");
   ESP_LOGCONFIG(TAG, "  DevInfo Panel: %ux%u", this->dev_info_.panel_width, this->dev_info_.panel_height);

@@ -134,6 +134,10 @@ external_components:
       path: components
     components: [it8951_reterminal_e1003]
 
+i2c:
+  sda: GPIO19
+  scl: GPIO20
+
 binary_sensor:
 # Left white button (back)
   - platform: gpio
@@ -225,6 +229,17 @@ binary_sensor:
 #              - light.turn_off: buzzer
 
 sensor:
+# SHT40 temperature and humidity sensor; temperature is forwarded to the IT8951 before each display refresh
+  - platform: sht4x
+    temperature:
+      name: "Temperature"
+      id: sht40_temperature
+      on_value:
+        - lambda: 'id(epaper_display).set_temperature((int)x);'
+    humidity:
+      name: "Humidity"
+    update_interval: 10s
+
 # Battery voltage and Battery level sensor configuration
   - platform: adc
     pin: GPIO1

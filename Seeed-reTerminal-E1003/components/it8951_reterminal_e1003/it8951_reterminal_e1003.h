@@ -56,6 +56,7 @@ typedef struct {
 class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
  public:
   void set_vcom(uint16_t vcom) { this->vcom_ = vcom; }
+  void set_temperature(int temp_celsius) { this->temperature_ = static_cast<int8_t>(temp_celsius); }
 
   void setup() override;
   void update() override;
@@ -115,6 +116,7 @@ class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
   const char *fail_reason_{nullptr};
   uint16_t probe_vcom_{0};
   bool first_update_{true};
+  int8_t temperature_{23};
   uint32_t spi_read_frequency_{1000000};
 };
 
