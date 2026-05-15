@@ -489,6 +489,7 @@ void IT8951ReTerminalE1003Display::update() {
     this->it8951_display_area_1bpp_(0, 0, w, h, 2, 0xFF, 0x00);
   } else {
     this->it8951_display_area_(0, 0, w, h, 2);
+    this->wait_for_display_ready_();
   }
   this->first_update_ = false;
 
