@@ -16,8 +16,9 @@
 ## 05. Set substitution rotation to 0 if you want to use the device in landscape mode, or 270 if you want to use it in portrait mode.
 ## 06. Create a helper boolean in Home Assistant that will control whether this frame goes into deep sleep. Set substitution ha_deep_sleep to this helper's entity name.
 ## 07. Set substitution deep_sleep_run to the amount of time the frame should stay awake. By default this is set to 2 minutes, which is enough to load a random image.
-## 08. Set substitution rtc_refresh_interval_hours to how often (in whole hours) the frame should refresh, aligned to clock boundaries (e.g. 1 = every hour at :00, 6 = at 00:00/06:00/12:00/18:00).
-##     Set rtc_active_hour_start and rtc_active_hour_end to define the window during which refreshes are allowed. Wakeups outside this window are skipped to the next boundary inside it.
+## 08. After installation, configure the refresh schedule in Home Assistant:
+##     - "Refresh Interval" — how often (in whole hours) to wake, aligned to clock boundaries (e.g. 1 = every hour at :00, 6 = at 00:00/06:00/12:00/18:00)
+##     - "Active Hours Start" / "Active Hours End" — window during which refreshes are allowed; wakeups outside this window are skipped to the next boundary inside it.
 ## 09. Upload properly prepared PNG images to the (sub)folder you configured. Number them sequentially, starting at 1.png, followed by 2.png, etc.
 ##     This configuration assumes a continuous set of sequentially ascending numbered files, with no gaps.
 ##
@@ -64,9 +65,6 @@ substitutions:
   rotation: 0
   ha_deep_sleep: "input_boolean.reterminal_deep_sleep"
   deep_sleep_run: "120s"
-  rtc_refresh_interval_hours: "1"   # wake every N clock-aligned hours
-  rtc_active_hour_start: "7"        # first hour of active window (inclusive, 0-23)
-  rtc_active_hour_end: "23"         # last hour of active window (inclusive, 0-23)
 
 ####################################################
 
@@ -86,9 +84,9 @@ esphome:
     - priority: 100
       then:
         - lambda: |-
-            int interval_h   = ${rtc_refresh_interval_hours};
-            int active_start = ${rtc_active_hour_start};
-            int active_end   = ${rtc_active_hour_end};
+            int interval_h   = (int)id(rtc_interval_hours).state;
+            int active_start = (int)id(rtc_hour_start).state;
+            int active_end   = (int)id(rtc_hour_end).state;
 
             auto t = id(rtc_time).now();
             if (!t.is_valid()) {
@@ -422,6 +420,48 @@ number:
                     char urlstring[254];
                     sprintf(urlstring, "${ha_www_url}${album_folder}%d%s", (int)id(image_counter).state, ".png");
                     return (urlstring);
+
+
+# Deep sleep schedule configuration
+  - platform: template
+    name: "Refresh Interval"
+    id: rtc_interval_hours
+    icon: mdi:clock-outline
+    entity_category: config
+    unit_of_measurement: "h"
+    min_value: 1
+    max_value: 24
+    step: 1
+    restore_value: true
+    initial_value: 1
+    optimistic: true
+    mode: box
+  - platform: template
+    name: "Active Hours Start"
+    id: rtc_hour_start
+    icon: mdi:weather-sunset-up
+    entity_category: config
+    unit_of_measurement: "h"
+    min_value: 0
+    max_value: 23
+    step: 1
+    restore_value: true
+    initial_value: 7
+    optimistic: true
+    mode: box
+  - platform: template
+    name: "Active Hours End"
+    id: rtc_hour_end
+    icon: mdi:weather-sunset-down
+    entity_category: config
+    unit_of_measurement: "h"
+    min_value: 0
+    max_value: 23
+    step: 1
+    restore_value: true
+    initial_value: 23
+    optimistic: true
+    mode: box
 
 
 ## Online image configuration
