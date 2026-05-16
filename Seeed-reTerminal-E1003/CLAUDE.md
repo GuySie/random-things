@@ -226,11 +226,12 @@ The driver uses mode 0 (INIT clear) followed by mode 2 (GC16) for each frame, wh
 
 Used for binary (pure black/white) images — faster to load and refresh.
 
-1. Enable: `WriteReg(UP1SR+2, ReadReg(UP1SR+2) | (1<<2))`
-2. Set colors: `WriteReg(BGVR, (background_gray << 8) | foreground_gray)` — gray levels 0x00–0xFF map to G0–G15.
-3. Load image using LD_IMG_AREA but divide both X and Width by 8 before passing to the command.
-4. Issue DISPLAY_AREA, wait for LUTAFSR == 0.
-5. Restore: `WriteReg(UP1SR+2, ReadReg(UP1SR+2) & ~(1<<2))`
+1. Clear 1bpp mode bit: `WriteReg(UP1SR+2, ReadReg(UP1SR+2) & ~(1<<2))` — do this unconditionally before every load regardless of path, so the INIT clear pass (mode 0) always runs in normal mode.
+2. Load image using LD_IMG_AREA with `pix_fmt = IT8951_8BPP` (3) and divide both X and Width by 8. The 1bpp mode bit only affects DISPLAY_AREA, not the load; packed bit data is transferred as if it were 8bpp with the width in bytes rather than pixels.
+3. Enable: `WriteReg(UP1SR+2, ReadReg(UP1SR+2) | (1<<2))` — set just before DISPLAY_AREA.
+4. Set colors: `WriteReg(BGVR, (background_gray << 8) | foreground_gray)` — gray levels 0x00–0xFF map to G0–G15.
+5. Issue DISPLAY_AREA, wait for LUTAFSR == 0.
+6. The bit does not need to be explicitly cleared after display — step 1 of the next refresh clears it unconditionally.
 
 ### Power state management
 
