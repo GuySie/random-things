@@ -439,6 +439,14 @@ void IT8951ReTerminalE1003Display::update() {
     return;
   }
 
+  if (this->it8951_sleeping_) {
+    ESP_LOGD(TAG, "Waking IT8951 from inter-refresh sleep");
+    digitalWrite(IT8951_PIN_EN, HIGH);
+    delay(10);  // allow TPS22916 power switch to close before SPI
+    this->lcd_sys_run_();
+    this->it8951_sleeping_ = false;
+  }
+
   this->do_update_();
   this->log_framebuffer_stats_();
   if (this->count_non_white_bytes_() == 0) {
@@ -492,6 +500,11 @@ void IT8951ReTerminalE1003Display::update() {
     this->wait_for_display_ready_();
   }
   this->first_update_ = false;
+
+  this->lcd_write_cmd_code_(IT8951_TCON_SLEEP);
+  digitalWrite(IT8951_PIN_EN, LOW);
+  this->it8951_sleeping_ = true;
+  ESP_LOGD(TAG, "IT8951 sleeping, EPD_Drive power cut");
 
   ESP_LOGV(TAG, "Display update triggered");
 }

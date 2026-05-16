@@ -6,17 +6,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 An ESPHome configuration for using a Seeed reTerminal E1003 (IT8951 e-ink controller, 1872×1404px, 16-level grayscale) as a digital art frame with Home Assistant. The device is an ESP32-S3 running Arduino framework with PSRAM. It wakes from deep sleep on a configurable schedule, downloads a numbered PNG image from Home Assistant's `/local/` folder, renders it, and sleeps again.
 
-## Build and flash
+## ESPHome references
 
-Compile and flash via ESPHome CLI:
+- **Source code**: https://github.com/esphome/esphome — component implementations live under `esphome/components/`. Python codegen is in `__init__.py` or a named `.py` file; C++ runtime in `.h`/`.cpp` alongside it.
+- **YAML docs**: https://esphome.io — authoritative reference for component options, action/condition syntax, and what's available without reading C++.
+- **ESP-IDF API docs**: https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/ — reference for C++ APIs used directly in lambdas (`RTC_DATA_ATTR`, `esp_random()`, `MALLOC_CAP_SPIRAM`, deep sleep). The Arduino framework wraps ESP-IDF so IDF docs are the authoritative source for those calls.
 
-```sh
-esphome compile config.yaml
-esphome upload config.yaml
-esphome logs config.yaml
-```
+## Reading PDFs in this repo
 
-Or use the ESPHome dashboard (Home Assistant add-on). The `components/` folder must be in the same directory as `config.yaml` — ESPHome resolves the `local` source path relative to the config file.
+Use the Read tool **without** specifying a `pages` parameter — calling it on a PDF without pages reads the whole document successfully. Specifying `pages` requires `pdftoppm` (poppler) which is not installed and will error.
+
+## Components
+
+The `components/` folder must be in the same directory as `config.yaml` — ESPHome resolves the `local` source path relative to the config file.
 
 ## Architecture
 
@@ -34,7 +36,8 @@ Or use the ESPHome dashboard (Home Assistant add-on). The `components/` folder m
 
 - `display.py` — ESPHome Python codegen; registers the component and exposes `vcom` config option.
 - `it8951_reterminal_e1003.h/.cpp` — C++ driver. SPI pins are hardcoded to the E1003 schematic (SCK=7, MISO=8, MOSI=9, CS=10, BUSY=13, EN=11, RST=12, ITE_EN=21). On `setup()`, it probes the controller through up to 4 power-cycle attempts to handle cold-boot and wake-from-sleep states, and allocates the framebuffer (1872×1404÷2 bytes = ~1.3 MB) in PSRAM.
-- On `update()`: runs the ESPHome draw callback into the framebuffer, detects whether the image is pure binary (all pixels 0x00 or 0x0F) to pick the faster 1bpp upload path vs 4bpp grayscale, sets the ambient temperature on the controller for waveform selection, issues an INIT clear pass (mode 0) to eliminate ghosting, then a GC16 refresh (mode 2).
+- On `update()`: if the IT8951 is in inter-refresh sleep (flag `it8951_sleeping_`), raises GPIO11 (EPD_Drive_EN), waits 10 ms for the TPS22916 switch, then issues SYS_RUN (0x0001) to wake the IT8951. Then runs the ESPHome draw callback into the framebuffer, detects whether the image is pure binary (all pixels 0x00 or 0x0F) to pick the faster 1bpp upload path vs 4bpp grayscale, sets the ambient temperature on the controller for waveform selection, issues an INIT clear pass (mode 0) to eliminate ghosting, then a GC16 refresh (mode 2). After the refresh completes (LUTAFSR=0), issues SLEEP (0x0003) and drives GPIO11 LOW to cut EPD_Drive power — saving the TPS651851RSLR quiescent current for the remainder of the wake window.
+- **Power note**: the IT8951 auto-manages POWER_SEQ (EPD panel power on/off) — it powers on when DISPLAY_AREA is called and powers off when the display finishes (LUTAFSR=0). No explicit POWER_SEQ command is needed. SLEEP/SYS_RUN are for the IT8951 clock domain only; GPIO11 (EPD_Drive_EN) is cut separately after SLEEP to eliminate the TPS651851RSLR input quiescent draw. GPIO21 (ITE_VCC_EN / 1.8 V core) remains HIGH across refreshes so the probe sequence is not needed between images in interactive mode.
 
 **`reference/`** — gitignored PDFs and example C code from ITE/Seeed; context only, never committed.
 
@@ -231,3 +234,144 @@ Used for binary (pure black/white) images — faster to load and refresh.
 ### Temperature override
 
 Command 0x0040 with par[0]=1 and par[1]=temperature in °C overrides IT8951's internal thermal sensor. Once set, IT8951 stops reading its own sensor. The E1003 board has a SHT40 (GPIO19/20, I2C 0x44) that is more accurate; the driver reads it and injects the value before each refresh to ensure correct waveform selection.
+
+## PCF8563 RTC protocol reference
+
+Source: NXP PCF8563 product data sheet Rev. 11.1 (19 January 2026), `reference/PCF8563.pdf`.
+
+### Overview
+
+I2C target address: write 0xA2 (7-bit: 0x51), read 0xA3. Max I2C speed 400 kHz. Register address auto-increments after each byte, so a full time read/write is one burst. All time fields are **BCD-encoded**.
+
+### Register map (relevant subset)
+
+| Address | Name | Key bits |
+|---------|------|----------|
+| 0x00 | Control_status_1 | Bit 5: STOP — set 1 to halt clock (for time-setting), clear to run |
+| 0x02 | VL_seconds | Bit 7: VL flag; bits 6:0: seconds (BCD 0–59) |
+| 0x03 | Minutes | Bits 6:0: minutes (BCD 0–59) |
+| 0x04 | Hours | Bits 5:0: hours (BCD 0–23) |
+| 0x05 | Days | Bits 5:0: day of month (BCD 1–31) |
+| 0x06 | Weekdays | Bits 2:0: weekday (0=Sun … 6=Sat) |
+| 0x07 | Century_months | Bit 7: century flag C; bits 4:0: month (BCD 1–12) |
+| 0x08 | Years | Bits 7:0: year within century (BCD 00–99; e.g. 2026 → 0x26) |
+
+### VL flag (Voltage-Low) — critical for sleep scheduling
+
+Bit 7 of register 0x02 (VL_seconds). **Default/startup value is 1** — set whenever VDD drops below ~0.9–1.0 V (e.g., coin cell dead, first boot after assembly). While VL=1 the clock has been running but integrity of the time value is not guaranteed.
+
+The ESPHome `pcf8563` component's `now().is_valid()` returns **false** when VL is set. This is why the `on_shutdown` lambda falls back to sleeping one full interval when `!t.is_valid()`:
+- First boot with no HA time sync yet → VL=1 → fallback sleep (correct)
+- After `pcf8563.write_time` is called (triggered by `on_time_sync`) → ESPHome driver clears VL → subsequent wakes use real RTC time
+
+VL can only be cleared by writing 0 to bit 7 via I2C; the ESPHome driver does this automatically during `write_time`.
+
+### Reading time atomically
+
+Seconds through years (0x02–0x08) must be read in a **single I2C burst** within 1 second. Reading in separate transactions risks a rollover between reads, giving minutes from one moment and hours from the next. The watchdog timer releases the interface (losing 1 s) if an I2C transaction exceeds 1 s.
+
+To read: write start address 0x02, then read 7 bytes (VL_seconds, Minutes, Hours, Days, Weekdays, Century_months, Years) without releasing the bus.
+
+### Setting time
+
+1. Write STOP=1 (Control_status_1 bit 5) to halt the prescaler.
+2. Write registers 0x02–0x08 with BCD-encoded values; also clear VL (bit 7 of 0x02) to mark time as valid.
+3. Write STOP=0 to restart the clock. First tick occurs 0.5–1.0 s after STOP release (prescaler uncertainty).
+
+The ESPHome `pcf8563.write_time` action handles all of this.
+
+### Century flag
+
+Bit 7 of register 0x07 (Century_months) is toggled automatically when the Years register overflows from 99→00. The initial century assignment is user-defined; ESPHome treats the year as 2000+years when C=0 and 2100+years when C=1 (implementation detail — check the ESPHome pcf8563 component source if century tracking matters).
+
+### Backup power
+
+Backup current from CR1220 coin cell: ~0.25 µA typical at 3.0 V (CLKOUT disabled). A CR1220 (~36 mAh) gives theoretical backup of several years; practical lifetime is limited more by self-discharge (~5–10 years) than by RTC current draw. The RTC continues running during ESP32 deep sleep as long as VSYS is present or the coin cell is live.
+
+## ED103TC2 panel reference
+
+Source: E Ink Holdings P-511-828(V:1), Formal Spec V1.0 (2019-05-14), `reference/Eink P-511-828-V1_ED103TC2 Formal Spec V1.0_20190514.pdf`.
+
+### Physical specifications
+
+- **Active area**: 157.25 mm (V) × 209.66 mm (H)
+- **Outline**: 174.4 × 216.7 × 0.78 mm, weight 60 ±7 g
+- **Pixel pitch**: 112 µm × 112 µm (square pixels)
+- **Resolution**: 1404 (V) × 1872 (H) — panel is landscape-oriented natively
+- **Grayscale**: 2–16 levels depending on controller waveform file
+
+### Native scan direction
+
+The panel's internal scan origin is at the **top-right corner** of the landscape panel: (0,0) = top-right, (1872,0) = top-left, (0,1404) = bottom-right. The FPC connector exits from the bottom edge. This is why the IT8951 is configured with rotation=270° (bits 1:0 = `11` in the LD_IMG ARG word) — it rotates the image so portrait-oriented artwork fills the screen correctly. When the IT8951 reports panel dimensions via GET_DEV_INFO, it returns 1872×1404 (landscape native); the driver maps this to portrait by rotating in firmware.
+
+### Temperature limits
+
+- **Operating**: 0°C to +50°C — must not refresh outside this range; the SHT40 temperature injection exists partly to allow the IT8951 to select correct waveforms within this window
+- **Storage**: −25°C to +70°C
+
+### Power supply rails
+
+All generated by the TPS651851RSLR PMIC, controlled by IT8951 over I2C:
+
+| Rail | Typ | Tolerance | Function |
+|------|-----|-----------|----------|
+| VDD | 3.3 V | 3.0–3.6 V | Digital logic |
+| VPOS | +15 V | ±0.4 V | Source driver positive |
+| VNEG | −15 V | ±0.4 V | Source driver negative |
+| VGH | +28 V | ±1 V | Gate driver positive |
+| VGL | −20 V | ±1 V | Gate driver negative |
+| VCOM | adjusted | ±0.1 V from label | Common electrode |
+
+**VCOM tolerance is ±0.1 V from the value printed on the panel label.** The default `vcom: 1400` in `config.yaml` (= −1.400 V) must be changed to match the actual panel if a replacement is fitted.
+
+**VCOM inrush current**: up to 0.8 A at turn-on — this is why VCOM is applied last in the power-on sequence.
+
+### Power-on sequence
+
+Managed by IT8951 via TPS651851RSLR. Must follow this order to avoid panel damage:
+1. Source chain: VSS → VDD → VNEG → VPOS → VCOM
+2. Gate chain: VSS → VDD → VGL → VGH (can parallel with source chain after VDD is stable)
+
+Key minimum delays: Tep ≥ 1 ms (VNEG stable before VPOS rises), Tng ≥ 1 ms (VGL stable before VGH rises).
+
+### Power-off sequence — critical constraints
+
+Violating these can permanently damage the panel:
+1. Stop data signals, then wait ≥100 µs before dropping VCOM.
+2. Drop VPOS and VNEG simultaneously (or VPOS first). They discharge through internal pull-down resistors.
+3. **VGL must stay negative of VCOM throughout the entire discharge period** — do not cut VGL early.
+4. Turn off VGL only after VNEG and VPOS have fully discharged to GND.
+5. Allow ≥500 ms total discharge time (Ted ≥ 0.5 s, discharged to −7.4 V reference point).
+
+The IT8951 POWER_SEQ command (0x0038 with par[0]=0) handles this sequence through the TPS651851RSLR. Cutting GPIO11 (EPD_Drive_EN) without issuing POWER_SEQ first bypasses the sequencing and risks panel damage.
+
+### Power consumption
+
+- **Active refresh** (typical → max): 380 mW → 5.5 W — drives the decision to gate EPD_Drive_EN between refreshes
+- **Standby** (image held, controller idle): ≤1.22 mW — E-ink is bi-stable; no power is needed to hold an image
+
+### Optical characteristics (at 25°C)
+
+- **White reflectance**: 35% min, 43% typical
+- **Contrast ratio**: 10 min, 14 typical
+- **Surface**: anti-glare treatment on protective sheet
+
+### FPC connector pinout (selected pins)
+
+Connector type 196033-40041, 40 pins. The schematic routes board connector J8 pin 1 to panel pin 6 (an offset of 5), so board J8 pin N = panel pin N+5.
+
+| Panel pin | Signal | Description |
+|-----------|--------|-------------|
+| 5, 11 | VDD | Digital supply (3.3 V) |
+| 9, 12, 22 | VSS | Ground |
+| 10 | VCOM | Common electrode voltage |
+| 36 | VPOS | Source driver positive (+15 V) |
+| 38 | VNEG | Source driver negative (−15 V) |
+| 40 | Border | Border electrode (tied to VCOM level for uniform border) |
+| 34 | TEST | E Ink internal test pin — must be connected to VDD |
+
+### Handling notes
+
+- Do not clean the protective sheet (PS) with acetone, toluene, or alcohol — use petroleum benzene or normal-hexane
+- Do not touch the PS surface with bare hands or greasy cloth; wipe water or saliva off immediately
+- Operating humidity limit for reliability testing: 90% RH at 40°C for 168 h

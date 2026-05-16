@@ -116,6 +116,7 @@ class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
   const char *fail_reason_{nullptr};
   uint16_t probe_vcom_{0};
   bool first_update_{true};
+  bool it8951_sleeping_{false};
   int8_t temperature_{23};
   uint32_t spi_read_frequency_{1000000};
 };
