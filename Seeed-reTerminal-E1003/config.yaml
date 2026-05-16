@@ -16,7 +16,7 @@
 ## 04. Set substitution max_images to the maximum amount of images you want to use in the future without having to update this configuration again.
 ## 05. Set substitution rotation to 0 if you want to use the device in landscape mode, or 270 if you want to use it in portrait mode.
 ## 06. Create a helper boolean in Home Assistant that will control whether this frame goes into deep sleep. Set substitution ha_deep_sleep to this helper's entity name.
-## 07. Optionally adjust substitution deep_sleep_run — the maximum time the device stays awake per cycle. The default of 2 minutes is enough to download and display an image.
+## 07. Optionally adjust substitution deep_sleep_run — the maximum time the device stays awake per cycle. The default of 90 seconds is enough to download and display an image.
 ## 08. Upload properly prepared PNG images to the (sub)folder you configured. Number them sequentially, starting at 1.png, followed by 2.png, etc.
 ##     This configuration assumes a continuous set of sequentially ascending numbered files, with no gaps.
 ##
@@ -67,7 +67,7 @@ substitutions:
   max_images: 1000
   rotation: 0
   ha_deep_sleep: "input_boolean.reterminal_deep_sleep"
-  deep_sleep_run: "120s"
+  deep_sleep_run: "90s"
 
 ####################################################
 
@@ -145,7 +145,7 @@ wifi:
 captive_portal:
 
 http_request:
-  buffer_size_rx: 8192
+  buffer_size_rx: 32768
 
 ## Deep sleep configuration
 # Comment out to disable deep sleep. This lets you use the green button as a control instead
