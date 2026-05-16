@@ -468,6 +468,7 @@ void IT8951ReTerminalE1003Display::update() {
   this->lcd_write_data_(static_cast<uint16_t>(this->temperature_));
   ESP_LOGD(TAG, "Temperature set to %d°C for waveform selection", this->temperature_);
 
+  this->it8951_write_reg_(UP1SR + 2, this->it8951_read_reg_(UP1SR + 2) & ~(1 << 2));
   this->set_img_buf_base_addr_(this->img_buf_addr_);
   if (use_1bpp) {
     const uint16_t one_bpp_width_bytes = w / 8;
@@ -477,7 +478,6 @@ void IT8951ReTerminalE1003Display::update() {
     this->lcd_write_framebuffer_1bpp_(w, h);
   } else {
     ESP_LOGD(TAG, "Using 4bpp grayscale upload path");
-    this->it8951_write_reg_(UP1SR + 2, this->it8951_read_reg_(UP1SR + 2) & ~(1 << 2));
     this->it8951_load_img_area_start_(IT8951_LDIMG_L_ENDIAN, IT8951_4BPP, 0, 0, 0, w, h);
     ESP_LOGD(TAG, "Uploading %u rows x %u words", h, width_in_words);
     this->lcd_write_framebuffer_4bpp_(reinterpret_cast<uint16_t *>(this->framebuffer_), width_in_words, h);
