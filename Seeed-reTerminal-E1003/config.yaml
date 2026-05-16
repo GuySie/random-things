@@ -88,7 +88,8 @@ esphome:
     - priority: 600
       then:
         - output.turn_on: bsp_battery_enable
-# Compute clock-aligned sleep duration from RTC
+  on_shutdown:
+# Compute clock-aligned sleep duration from RTC just before entering deep sleep
     - priority: 100
       then:
         - lambda: |-
@@ -155,7 +156,7 @@ http_request:
 deep_sleep:
   id: deep_sleep_1
   run_duration: ${deep_sleep_run}
-# sleep_duration is computed dynamically from RTC on each boot (see on_boot lambda above)
+# sleep_duration is computed dynamically from RTC just before sleep (see on_shutdown lambda above)
 # Green button interrupts deep sleep
   wakeup_pin: GPIO3
   wakeup_pin_mode: INVERT_WAKEUP

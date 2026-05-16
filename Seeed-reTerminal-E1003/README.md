@@ -33,3 +33,7 @@ Number images sequentially with no gaps: `1.png`, `2.png`, `3.png`, etc.
 ## IT8951 component
 
 ESPHome currently does not provide support for the IT8951 controller used in the E1003, so we provide a local component. This component is a modification of the [code by koosoli](https://github.com/esphome/esphome/pull/15415), modified using Claude Code to work specifically for this art frame purpose. No guarantees it will work for anything else.
+
+## AI warning
+
+While this is based on an original configuration for the Seeed reTerminal E1002 that I wrote manually, this version for the E1003 was made with heavy assistance from Claude Code. If you are against using AI-generated code please do not install this.
