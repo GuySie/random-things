@@ -12,8 +12,7 @@
 ## 01. Set substitutions for names, keys, passwords, etc.
 ## 02. Set substitution ha_www_url to the publicly accessible URL of your www folder, with trailing slash. This default should work for most people.
 ##     For more information, check: https://www.home-assistant.io/integrations/http/#hosting-files
-## 03. If you want to store the images you will display in a subfolder, set substitution album_folder to the name of this folder and add a trailing slash.
-##     Change to "" if no subfolder is used.
+## 03. Set substitution album_folder to the initial subfolder name (no trailing slash needed, or "" for none). Changeable at runtime via the "Album Folder" text entity in Home Assistant.
 ## 04. Set substitution max_images to the maximum amount of images you want to use in the future without having to update this configuration again.
 ## 05. Set substitution rotation to 0 if you want to use the device in landscape mode, or 270 if you want to use it in portrait mode.
 ## 06. Create a helper boolean in Home Assistant that will control whether this frame goes into deep sleep. Set substitution ha_deep_sleep to this helper's entity name.
@@ -66,7 +65,7 @@ substitutions:
   wifi_ssid: !secret wifi_ssid
   wifi_password: !secret wifi_password
   ha_www_url: "http://homeassistant.local:8123/local/"
-  album_folder: "reterminal/"
+  album_folder: "reterminal"
   max_images: 1000
   rotation: 0
   ha_deep_sleep: "input_boolean.reterminal_deep_sleep"
@@ -428,7 +427,9 @@ number:
                   id: onlineimage
                   url: !lambda |-
                     char urlstring[254];
-                    sprintf(urlstring, "${ha_www_url}${album_folder}%d%s", (int)id(image_counter).state, ".png");
+                    std::string folder = id(album_folder_text).state;
+                    if (!folder.empty() && folder.back() != '/') folder += '/';
+                    sprintf(urlstring, "${ha_www_url}%s%d.png", folder.c_str(), (int)id(image_counter).state);
                     return (urlstring);
 
 
@@ -494,6 +495,21 @@ online_image:
           level: WARN
           format: "Failed to download image %d"
           args: ["(int)id(image_counter).state"]
+
+
+## Text configuration
+text:
+# Subfolder within Home Assistant's /local/ folder where images are stored; no trailing slash needed
+  - platform: template
+    name: "Album Folder"
+    id: album_folder_text
+    icon: mdi:folder-image
+    mode: text
+    restore_value: true
+    initial_value: "${album_folder}"
+    optimistic: true
+    max_length: 64
+    entity_category: config
 
 
 ## Switch configuration

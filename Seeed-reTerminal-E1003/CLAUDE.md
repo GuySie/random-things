@@ -168,7 +168,7 @@ The IT8951E/DX translates SPI frames into internal I80 bus cycles. All commands 
 | 0x0022 | LD_IMG_END | End load image cycle — **mandatory after every LD_IMG/LD_IMG_AREA** |
 | 0x0302 | GET_DEV_INFO | Returns 20 words: panel W, panel H, imgbuf addr L, imgbuf addr H, 8×FW version, 8×LUT version |
 | 0x0034 | DISPLAY_AREA | Trigger display refresh; 5 params = x, y, w, h, mode |
-| 0x0038 | POWER_SEQ | EPD power on/off: par[0]=0 off, 1 on |
+| 0x0038 | POWER_SEQ | EPD power on/off: par[0]=0 off, 1 on — **auto-managed**: IT8951 issues this automatically on DISPLAY_AREA and again when refresh finishes; do not call manually unless overriding sequencing |
 | 0x0039 | SET_VCOM | Get/set VCOM: par[0]=0 get, par[0]=1 set then par[1]=value (e.g. 1400 = −1.400 V) |
 | 0x0040 | SET_TEMP | Force temperature: par[0]=0 get, par[0]=1 set then par[1]=°C; disables IT8951 thermal sensor |
 
@@ -230,6 +230,16 @@ Used for binary (pure black/white) images — faster to load and refresh.
 3. Load image using LD_IMG_AREA but divide both X and Width by 8 before passing to the command.
 4. Issue DISPLAY_AREA, wait for LUTAFSR == 0.
 5. Restore: `WriteReg(UP1SR+2, ReadReg(UP1SR+2) & ~(1<<2))`
+
+### Power state management
+
+**POWER_SEQ auto-management (source: Programming Guide v2.7, §1.2):** IT8951 automatically issues POWER_SEQ on when DISPLAY_AREA is called and POWER_SEQ off when the refresh finishes (LUTAFSR returns to 0). The host does not need to call 0x0038 explicitly. The CLAUDE.md warning about cutting GPIO11 without POWER_SEQ applies to cutting the external power switch *without* IT8951's involvement — but IT8951 already handles the sequenced shutdown before LUTAFSR clears.
+
+**SLEEP (0x0003) / SYS_RUN (0x0001):** These operate on the IT8951 clock domain only and do not affect the EPD panel power rails (those are controlled by auto POWER_SEQ via IT8951→TPS651851RSLR I2C). Issue SLEEP after a refresh completes to stop IT8951 internal clocks; issue SYS_RUN to wake before the next refresh. No parameters for either command.
+
+**HRDY during SLEEP:** HRDY remains HIGH when IT8951 is in SLEEP state. The ITE sample code for waking from SLEEP calls `LCDWaitForReady()` then `LCDWriteCmdCode(SYS_RUN)` — this would hang if HRDY went LOW during sleep. Reliable SYS_RUN wake therefore does not require a hardware RST toggle, enabling fast inter-refresh wakeup without the full `power_cycle_()` probe sequence.
+
+**GPIO11 (EPD_Drive_EN) vs SLEEP:** SLEEP stops IT8951 clocks but the IT8951 1.8 V core (GPIO21/ITE_VCC_EN) stays on. GPIO11 can be driven LOW after SLEEP to cut TPS651851RSLR input quiescent current; raise it again (with a 10 ms stabilisation delay for the TPS22916 switch) before sending SYS_RUN on the next refresh.
 
 ### Temperature override
 
