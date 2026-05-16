@@ -2,7 +2,7 @@
 
 ESPHome configuration for using a [Seeed reTerminal E1003](https://www.seeedstudio.com/reTerminal-E1003-frame-bundle.html) epaper display as a digital art frame with Home Assistant. Combining the high DPI (1872x1404px resolution) with 16 tints grayscale, this display can convincingly emulate the look of a black and white photography print.
 
-The display wakes from deep sleep on a configurable schedule, loads a random image from your Home Assistant media folder, and goes back to sleep. Recent images are tracked across sleep cycles so the same image is never shown twice in a row. The white buttons on the device step through images sequentially while awake; the green button wakes the display early and loads a random image once wifi connects.
+The display wakes from deep sleep on a configurable schedule, loads a random image from your Home Assistant media folder, and goes back to sleep. By default, recent images are tracked across sleep cycles so the same image is not shown again until roughly half the collection has cycled through — this can be toggled off from Home Assistant to pick images with no restriction. The white buttons on the device step through images sequentially while awake; the green button wakes the display early and loads a random image once wifi connects.
 
 The refresh schedule — how often to wake and during which hours — is configured directly from Home Assistant without reflashing.
 
