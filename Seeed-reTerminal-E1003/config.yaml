@@ -28,10 +28,11 @@
 ## 13. In the display's ESPHome settings, turn on the option "Allow the device to perform Home Assistant actions."
 ## 14. In Home Assistant, set the "Total Images" number of this ESPHome device to the highest numbered image you have uploaded.
 ##     Update this number if you upload additional (sequentially-numbered) images.
-## 15. In the display's ESPHome settings, configure the refresh schedule (no reflashing needed):
+## 15. In the display's ESPHome settings, configure the following (no reflashing needed):
 ##     - "Refresh Interval" — how often (in whole hours) to wake, aligned to clock boundaries (e.g. 1 = every hour at :00, 6 = at 00:00/06:00/12:00/18:00)
 ##     - "Active Hours Start" / "Active Hours End" — window during which refreshes are allowed; wakeups outside this window are skipped to the next boundary inside it.
 ##       Set start 0 and end to 23 to run continuously around the clock.
+##     - "Album Folder" — subfolder within /local/ where images are stored; no trailing slash needed, leave empty if images are in /local/ directly.
 ##
 ## USAGE
 ## 16. Set your deep sleep helper boolean to on, so the display will automatically go through deep sleep cycles. Every time it wakes, it will load a random image.

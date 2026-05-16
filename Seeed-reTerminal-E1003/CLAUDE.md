@@ -22,11 +22,12 @@ The `components/` folder must be in the same directory as `config.yaml` — ESPH
 
 ## Architecture
 
-**`config.yaml`** — the entire device logic lives here. All substitutions are at the top and are the primary configuration surface for end users. Key flows:
+**`config.yaml`** — the entire device logic lives here. Substitutions are at the top and set compile-time defaults; several settings can also be changed at runtime from Home Assistant without reflashing (see below). Key flows:
 
-- `wifi.on_connect` triggers `random_image` button, which picks an image (mode controlled by the `use_image_history` switch — see below), sets `image_counter`, which triggers `online_image.set_url`, which triggers a download, which on completion triggers `component.update: epaper_display` and records the image number to the history buffer.
+- `wifi.on_connect` triggers `component.update: sht40_sensor` (reads temperature for IT8951 waveform selection; completes in ~10 ms, well before the download finishes) and then `random_image` button, which picks an image (mode controlled by the `use_image_history` switch — see below), sets `image_counter`, which triggers `online_image.set_url`, which triggers a download, which on completion triggers `component.update: epaper_display` and records the image number to the history buffer.
 - Deep sleep duration is computed dynamically just before sleep (priority 100 `on_shutdown` lambda) using the PCF8563 RTC: it finds the next clock-aligned boundary at `rtc_interval_hours`-hour intervals, then advances past any boundaries outside the `rtc_hour_start`–`rtc_hour_end` active window. Falls back to sleeping one full interval if the RTC is not set. Computing at shutdown (rather than boot) accounts for actual time spent awake and gives more accurate wake-up alignment.
 - Deep sleep is gated by a Home Assistant `input_boolean` synced via the `allow_deepsleep` homeassistant switch. The refresh schedule (`Refresh Interval`, `Active Hours Start`, `Active Hours End`) is configurable from HA without reflashing via persistent `number` entities (defaults: 1 h interval, 07:00–23:00 window). The green button (GPIO3) is wired as a deep sleep wakeup pin.
+- The image subfolder is set via a persistent `text` entity (`album_folder_text`, "Album Folder") editable from HA at runtime. The `album_folder` substitution provides the initial/flashed default; no trailing slash is needed — the URL lambda appends one automatically when the folder is non-empty.
 - The PCF8563 RTC (`update_interval: never`) is synced from the `homeassistant` time platform on each `on_time_sync` event, so the clock stays accurate across deep sleep cycles.
 - Battery voltage is measured through a voltage divider on GPIO1, enabled via GPIO40. Battery level is derived via `calibrate_linear` filter.
 
@@ -93,7 +94,7 @@ The `components/` folder must be in the same directory as `config.yaml` — ESPH
 | 48 | TOUCH_RES | Touch panel reset |
 
 ### I2C devices (I2C0, GPIO19=SDA, GPIO20=SCL)
-- **0x44** — SHT40 temperature & humidity sensor
+- **0x44** — SHT40 temperature sensor (`update_interval: never`; triggered once per wake cycle at `wifi.on_connect`; `internal: true` — value is forwarded to IT8951 only, not exposed to HA)
 - **0x51** — PCF8563 RTC
 - SY6974B PMIC (address per datasheet; INT line connected but GPIO not labeled in schematic)
 - Touch panel (address per touch IC datasheet)
