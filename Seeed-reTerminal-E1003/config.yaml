@@ -234,6 +234,15 @@ binary_sensor:
     disabled_by_default: true
     on_press:
       then:
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 20ms
+              - light.turn_off: buzzer
 # If currently displayed image is the first one in the folder, don't go further back
         - if:
             condition:
@@ -244,15 +253,6 @@ binary_sensor:
               - number.decrement:
                   id: image_counter
                   cycle: false
-        - if:
-            condition:
-              lambda: 'return (id(audiofeedback).state);'
-            then:
-              - light.turn_on:
-                  id: buzzer
-                  brightness: 25%
-              - delay: 20ms
-              - light.turn_off: buzzer
 
 # Right white button (forward)
   - platform: gpio
@@ -265,6 +265,15 @@ binary_sensor:
     disabled_by_default: true
     on_press:
       then:
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 20ms
+              - light.turn_off: buzzer
 # If currently displayed image is the last one in the folder, don't go further forward
         - if:
             condition:
@@ -275,15 +284,6 @@ binary_sensor:
               - number.increment:
                   id: image_counter
                   cycle: false
-        - if:
-            condition:
-              lambda: 'return (id(audiofeedback).state);'
-            then:
-              - light.turn_on:
-                  id: buzzer
-                  brightness: 25%
-              - delay: 20ms
-              - light.turn_off: buzzer
 
 ## Green button (random)
 # Uncomment to use green button for random image. You must disable deep sleep to do so.
@@ -616,6 +616,15 @@ button:
     icon: "mdi:slot-machine"
     on_press:
       then:
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 20ms
+              - light.turn_off: buzzer
         - lambda: |-
             int total = (int)id(total_images).state;
             int candidate = -1;
@@ -657,6 +666,12 @@ button:
             }
 
             id(image_counter).make_call().set_value(candidate).perform();
+  - platform: template
+    name: "Previous Image"
+    id: previous_image
+    icon: "mdi:skip-previous"
+    on_press:
+      then:
         - if:
             condition:
               lambda: 'return (id(audiofeedback).state);'
@@ -666,12 +681,6 @@ button:
                   brightness: 25%
               - delay: 20ms
               - light.turn_off: buzzer
-  - platform: template
-    name: "Previous Image"
-    id: previous_image
-    icon: "mdi:skip-previous"
-    on_press:
-      then:
 # If currently displayed image is the first one in the folder, don't go further back
         - if:
             condition:
@@ -682,6 +691,12 @@ button:
               - number.decrement:
                   id: image_counter
                   cycle: false
+  - platform: template
+    name: "Next Image"
+    id: next_image
+    icon: "mdi:skip-next"
+    on_press:
+      then:
         - if:
             condition:
               lambda: 'return (id(audiofeedback).state);'
@@ -691,12 +706,6 @@ button:
                   brightness: 25%
               - delay: 20ms
               - light.turn_off: buzzer
-  - platform: template
-    name: "Next Image"
-    id: next_image
-    icon: "mdi:skip-next"
-    on_press:
-      then:
 # If currently displayed image is the last one in the folder, don't go further forward
         - if:
             condition:
@@ -707,12 +716,3 @@ button:
               - number.increment:
                   id: image_counter
                   cycle: false
-        - if:
-            condition:
-              lambda: 'return (id(audiofeedback).state);'
-            then:
-              - light.turn_on:
-                  id: buzzer
-                  brightness: 25%
-              - delay: 20ms
-              - light.turn_off: buzzer
