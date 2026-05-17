@@ -10,10 +10,12 @@
 ## HOW TO USE
 ##
 ## PREPARATION
-## 01. Set substitutions for names, keys, passwords, etc.
+## 01. Set substitutions. Replace api_key, ota_password, and ap_password with real
+##     values — don't leave the FILL_IN_* placeholders.
 ## 02. Set substitution rotation to 0 for landscape mode, or 270 for portrait mode.
 ## 03. Create a helper boolean in Home Assistant to control whether this frame goes into
-##     deep sleep. Set substitution ha_deep_sleep to this helper's entity name.
+##     deep sleep. The default entity name is input_boolean.reterminal_deep_sleep — if
+##     you create a helper with that name you can skip changing substitution ha_deep_sleep.
 ## 04. Optionally change substitution ha_www_url to the publicly accessible URL of your www
 ##     folder, with trailing slash. The default should work for most people.
 ##     For more information, check:
@@ -23,9 +25,10 @@
 ## 06. Optionally adjust substitution deep_sleep_run — a safety timeout: the device
 ##     normally returns to deep sleep immediately after displaying an image, but this
 ##     caps the maximum awake time in case something goes wrong.
-## 07. Upload your PNG images to the (sub)folder you configured. Number them
-##     sequentially: 1.png, 2.png, etc. No gaps — the configuration assumes a
-##     continuous set of sequentially ascending numbered files. Images must be:
+## 07. Upload your PNG images to a subfolder of your www folder (you will set the folder
+##     name in step 14). Number them sequentially: 1.png, 2.png, etc. No gaps — the
+##     configuration assumes a continuous set of sequentially ascending numbered files.
+##     Images must be:
 ##     - In PNG format
 ##     - 1404x1872 pixels for portrait (rotation: 270), or 1872x1404 for landscape
 ##     - 16-level grayscale (the IT8951 controller renders 4bpp grayscale)
@@ -71,13 +74,13 @@
 ####################################################
 
 substitutions:
-  name: seeed-grayscale
+  name: reterminal-e1003
   friendly_name: "Seeed reTerminal E1003"
   project_name: "Guy Sie.reTerminal E1003 Art Display"
-  project_version: "0.6.0"
-  api_key: ""
-  ota_password: ""
-  ap_password: ""
+  project_version: "0.7.0"
+  api_key: "FILL_IN_API_KEY"
+  ota_password: "FILL_IN_OTA_PASSWORD"
+  ap_password: "FILL_IN_AP_PASSWORD"
   rotation: 0
   ha_deep_sleep: "input_boolean.reterminal_deep_sleep"
 
@@ -574,7 +577,6 @@ switch:
     optimistic: true
     restore_mode: RESTORE_DEFAULT_OFF
     entity_category: config
-    lambda: return id(audiofeedback).state;
 # Toggle between history-aware random selection (avoids recent images) and pure random
   - platform: template
     name: "Image History"
@@ -583,7 +585,6 @@ switch:
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
     entity_category: config
-    lambda: return id(use_image_history).state;
 # Deep sleep behavior linked to input boolean in Home Assistant
   - platform: homeassistant
     id: allow_deepsleep
@@ -612,7 +613,6 @@ switch:
           action: input_boolean.turn_off
           data:
             entity_id: ${ha_deep_sleep}
-    lambda: return id(allow_deepsleep_toggle).state;
 # Restart
   - platform: restart
     name: "Device Restart"
