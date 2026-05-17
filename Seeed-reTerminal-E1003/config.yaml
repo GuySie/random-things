@@ -89,6 +89,10 @@ esphome:
       then:
         - output.turn_on: bsp_battery_enable
   on_shutdown:
+# Disable battery voltage divider before deep sleep
+    - priority: 200
+      then:
+        - output.turn_off: bsp_battery_enable
 # Compute clock-aligned sleep duration from RTC just before entering deep sleep
     - priority: 100
       then:
@@ -137,10 +141,12 @@ ota:
 wifi:
   ssid: ${wifi_ssid}
   password: ${wifi_password}
+  fast_connect: true
 # Device waits for successful wifi connection (specifically, after initial boot and after waking from deep sleep) to update to a new random image
 # Side effect: will also trigger on wifi reconnection if device has poor reception
   on_connect:
     - component.update: sht40_sensor
+    - component.update: battery_voltage
     - button.press: random_image
 # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
@@ -305,7 +311,7 @@ sensor:
     name: "Battery Voltage"
     id: battery_voltage
     internal: true
-    update_interval: 20s
+    update_interval: 60s
     attenuation: 12db
     filters:
 # Compensate for voltage divider
@@ -493,11 +499,13 @@ online_image:
           if (g_hist_count < 50) g_hist_count++;
           ESP_LOGI("img_history", "Added image %d to history (count=%d)",
                    (int)id(image_counter).state, (int)g_hist_count);
+      - deep_sleep.enter: deep_sleep_1
     on_error:
       - logger.log:
           level: WARN
           format: "Failed to download image %d"
           args: ["(int)id(image_counter).state"]
+      - deep_sleep.enter: deep_sleep_1
 
 
 ## Text configuration
