@@ -11,23 +11,19 @@
 ##
 ## PREPARATION
 ## 01. Set substitutions for names, keys, passwords, etc.
-## 02. Set substitution ha_www_url to the publicly accessible URL of your www folder,
-##     with trailing slash. This default should work for most people.
+## 02. Set substitution rotation to 0 for landscape mode, or 270 for portrait mode.
+## 03. Create a helper boolean in Home Assistant to control whether this frame goes into
+##     deep sleep. Set substitution ha_deep_sleep to this helper's entity name.
+## 04. Optionally change substitution ha_www_url to the publicly accessible URL of your www
+##     folder, with trailing slash. The default should work for most people.
 ##     For more information, check:
 ##     https://www.home-assistant.io/integrations/http/#hosting-files
-## 03. Set substitution album_folder to the initial subfolder name (no trailing slash
-##     needed, or "" for none). Changeable at runtime via the "Album Folder" text
-##     entity in Home Assistant.
-## 04. Set substitution max_images to the maximum number of images you want to use in
+## 05. Optionally set substitution max_images to the maximum number of images you want to use in
 ##     the future without having to update this configuration again.
-## 05. Set substitution rotation to 0 for landscape mode, or 270 for portrait mode.
-## 06. Create a helper boolean in Home Assistant to control whether this frame goes into
-##     deep sleep. Set substitution ha_deep_sleep to this helper's entity name.
-## 07. Optionally adjust substitution deep_sleep_run — a safety timeout: the device
+## 06. Optionally adjust substitution deep_sleep_run — a safety timeout: the device
 ##     normally returns to deep sleep immediately after displaying an image, but this
-##     caps the maximum awake time in case something goes wrong. 90 seconds is well
-##     above typical download+display time.
-## 08. Upload your PNG images to the (sub)folder you configured. Number them 
+##     caps the maximum awake time in case something goes wrong.
+## 07. Upload your PNG images to the (sub)folder you configured. Number them
 ##     sequentially: 1.png, 2.png, etc. No gaps — the configuration assumes a
 ##     continuous set of sequentially ascending numbered files. Images must be:
 ##     - In PNG format
@@ -35,16 +31,16 @@
 ##     - 16-level grayscale (the IT8951 controller renders 4bpp grayscale)
 ##
 ## INSTALLATION
-## 09. Set your deep sleep helper boolean to off, so you can configure the display
+## 08. Set your deep sleep helper boolean to off, so you can configure the display
 ##     after installation.
-## 10. Keep image_history.h in the same folder as this yaml — required for compilation.
-## 11. Install this configuration onto your Seeed reTerminal E1003 display.
-## 12. Add the display to Home Assistant after it has been discovered.
-## 13. In the display's ESPHome settings, turn on "Allow the device to perform Home
+## 09. Keep image_history.h in the same folder as this yaml — required for compilation.
+## 10. Install this configuration onto your Seeed reTerminal E1003 display.
+## 11. Add the display to Home Assistant after it has been discovered.
+## 12. In the display's ESPHome settings, turn on "Allow the device to perform Home
 ##     Assistant actions."
-## 14. In Home Assistant, set the "Total Images" number of this ESPHome device to the
+## 13. In Home Assistant, set the "Total Images" number of this ESPHome device to the
 ##     highest numbered image you have uploaded. Update this if you add more images.
-## 15. In the display's ESPHome settings, configure the following (no reflashing needed):
+## 14. In the display's ESPHome settings, configure the following (no reflashing needed):
 ##     - "Refresh Interval" — how often (in whole hours) to wake, aligned to clock
 ##       boundaries (e.g. 1 = every hour at :00, 6 = at 00:00/06:00/12:00/18:00)
 ##     - "Active Hours Start" / "Active Hours End" — window during which refreshes are
@@ -54,20 +50,20 @@
 ##       no trailing slash needed, leave empty if images are in the www folder directly.
 ##
 ## USAGE
-## 16. Set your deep sleep helper boolean to on. Every time the display wakes, it will
+## 15. Set your deep sleep helper boolean to on. Every time the display wakes, it will
 ##     load and display a random image, then immediately return to deep sleep.
-## 17. You can also control deep sleep directly from the display's ESPHome settings.
-## 18. Press the green button to wake the display out of deep sleep (and load a random
+## 16. You can also control deep sleep directly from the display's ESPHome settings.
+## 17. Press the green button to wake the display out of deep sleep (and load a random
 ##     image).
-## 19. While awake, press the white buttons on top of the display to step forward/
+## 18. While awake, press the white buttons on top of the display to step forward/
 ##     backward through your images sequentially.
-## 20. While awake, use the buttons in the display's ESPHome settings to go to the
+## 19. While awake, use the buttons in the display's ESPHome settings to go to the
 ##     next, previous, or a random image.
-## 21. While awake, set the "Current Image" number of this device in Home Assistant
+## 20. While awake, set the "Current Image" number of this device in Home Assistant
 ##     to jump to that specific numbered image.
-## 22. Turn on the Audio Feedback toggle in the display's ESPHome settings to get
+## 21. Turn on the Audio Feedback toggle in the display's ESPHome settings to get
 ##     buzzer sounds when performing actions.
-## 23. The Image History switch in the display's ESPHome settings controls random
+## 22. The Image History switch in the display's ESPHome settings controls random
 ##     selection mode: on (default) avoids recently shown images; off picks freely.
 ##
 ## By Guy Sie (https://github.com/guysie)
@@ -82,13 +78,14 @@ substitutions:
   api_key: ""
   ota_password: ""
   ap_password: ""
+  rotation: 0
+  ha_deep_sleep: "input_boolean.reterminal_deep_sleep"
+
+# Sane defaults that should work for most people
   wifi_ssid: !secret wifi_ssid
   wifi_password: !secret wifi_password
   ha_www_url: "http://homeassistant.local:8123/local/"
-  album_folder: ""
   max_images: 1000
-  rotation: 0
-  ha_deep_sleep: "input_boolean.reterminal_deep_sleep"
   deep_sleep_run: "90s"
 
 ####################################################
@@ -103,10 +100,11 @@ esphome:
   includes:
     - image_history.h
   on_boot:
-# Enable battery voltage measurement
+# Enable battery voltage measurement and record boot time from RTC
     - priority: 600
       then:
         - output.turn_on: bsp_battery_enable
+        - component.update: last_boot_sensor
   on_shutdown:
 # Disable battery voltage divider before deep sleep
     - priority: 200
@@ -364,12 +362,23 @@ sensor:
       - clamp:
           min_value: 0
           max_value: 100
-  - platform: uptime
+
+text_sensor:
+  - platform: template
     name: "Last Boot"
-    id: uptime_sensor
+    id: last_boot_sensor
     entity_category: diagnostic
     disabled_by_default: true
-    type: timestamp
+    device_class: timestamp
+    update_interval: never
+    lambda: |-
+      auto t = id(rtc_time).now();
+      if (!t.is_valid()) return {};
+      char buf[30];
+      time_t ts = t.timestamp;
+      struct tm *gmt = gmtime(&ts);
+      strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S+00:00", gmt);
+      return std::string(buf);
 
 output:
 # Green side LED GPIO configuration
@@ -550,7 +559,7 @@ text:
     icon: mdi:folder-image
     mode: text
     restore_value: true
-    initial_value: "${album_folder}"
+    initial_value: ""
     optimistic: true
     max_length: 64
     entity_category: config
