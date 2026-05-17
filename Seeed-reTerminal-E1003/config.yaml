@@ -345,6 +345,12 @@ sensor:
       - clamp:
           min_value: 0
           max_value: 100
+  - platform: uptime
+    name: "Last Boot"
+    id: uptime_sensor
+    entity_category: diagnostic
+    disabled_by_default: true
+    type: timestamp
 
 output:
 # Green side LED GPIO configuration
@@ -499,13 +505,21 @@ online_image:
           if (g_hist_count < 50) g_hist_count++;
           ESP_LOGI("img_history", "Added image %d to history (count=%d)",
                    (int)id(image_counter).state, (int)g_hist_count);
-      - deep_sleep.enter: deep_sleep_1
+      - if:
+          condition:
+            lambda: 'return id(allow_deepsleep).state;'
+          then:
+            - deep_sleep.enter: deep_sleep_1
     on_error:
       - logger.log:
           level: WARN
           format: "Failed to download image %d"
           args: ["(int)id(image_counter).state"]
-      - deep_sleep.enter: deep_sleep_1
+      - if:
+          condition:
+            lambda: 'return id(allow_deepsleep).state;'
+          then:
+            - deep_sleep.enter: deep_sleep_1
 
 
 ## Text configuration

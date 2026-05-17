@@ -2,23 +2,13 @@
 
 ESPHome configuration for using a [Seeed reTerminal E1003](https://www.seeedstudio.com/reTerminal-E1003-frame-bundle.html) epaper display as a digital art frame with Home Assistant. Combining the high DPI (1872x1404px resolution) with 16 tints grayscale, this display can convincingly emulate the look of a black and white photography print.
 
-The display wakes from deep sleep on a configurable schedule, loads a random image from your Home Assistant media folder, and goes back to sleep. By default, recent images are tracked across sleep cycles so the same image is not shown again until roughly half the collection has cycled through — this can be toggled off from Home Assistant to pick images with no restriction. The white buttons on the device step through images sequentially while awake; the green button wakes the display early and loads a random image once wifi connects.
+The display wakes from deep sleep on a configurable schedule, loads a random image from a configurable folder in your Home Assistant local www folder, displays it, and immediately returns to deep sleep. By default, recent images are tracked across sleep cycles so the same image is not shown again until roughly half the collection has cycled through — this can be toggled off from Home Assistant to pick images with no restriction. The white buttons on the device step through images sequentially while awake; the green button wakes the display early and loads a random image once wifi connects.
 
-The refresh schedule — how often to wake and during which hours — is configured directly from Home Assistant without reflashing.
+The refresh schedule — how often to wake and during which hours — and the image folder are all configured directly from Home Assistant without reflashing.
 
-### Installing the component
+### Installation
 
-The `components` folder and `image_history.h` in this repo must be placed in the **same directory** as `config.yaml` before you compile or flash. ESPHome resolves the `local` path relative to the config file. If you are using the **ESPHome dashboard** (Home Assistant add-on or standalone), copy them into your ESPHome config directory.
-
-## Setup
-
-Full step-by-step instructions are in the comments at the top of [config.yaml](config.yaml). The short version:
-
-1. Set the substitutions at the top of `config.yaml` (name, API key, OTA password, etc.)
-2. Create a Home Assistant helper boolean to control deep sleep
-3. Flash the configuration and add the device to Home Assistant
-4. Upload your images and set the **Total Images** number in the device settings
-5. Set **Refresh Interval**, **Active Hours Start**, and **Active Hours End** in the device settings to configure the wakeup schedule (no reflash needed)
+The `components` folder and `image_history.h` in this repo must be placed in the **same directory** as the device's YAML file (`config.yaml` here) before you compile or flash. ESPHome resolves the `local` path relative to the config file. If you are using the **ESPHome dashboard** (Home Assistant app or standalone), copy them into your ESPHome config directory. Full step-by-step instructions are in the comments at the top of [config.yaml](config.yaml). 
 
 ## Image preparation
 
