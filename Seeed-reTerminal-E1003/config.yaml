@@ -2,54 +2,73 @@
 ## Seeed reTerminal E1003 Art Display
 ##
 ## Configuration to use a Seeed reTerminal E1003 e-ink display as a digital art frame.
-## The display wakes on a configurable schedule to show a random image. By default, recently
-## shown images are tracked so the same image won't repeat until roughly half the collection
-## has cycled through. This can be toggled off from Home Assistant for pure random selection.
+## The display wakes on a configurable schedule, loads a random image, displays it, and
+## immediately returns to deep sleep. By default, recently shown images are tracked so
+## the same image won't repeat until roughly half the collection has cycled through.
+## This can be toggled off from Home Assistant for pure random selection.
 ##
 ## HOW TO USE
 ##
 ## PREPARATION
 ## 01. Set substitutions for names, keys, passwords, etc.
-## 02. Set substitution ha_www_url to the publicly accessible URL of your www folder, with trailing slash. This default should work for most people.
-##     For more information, check: https://www.home-assistant.io/integrations/http/#hosting-files
-## 03. Set substitution album_folder to the initial subfolder name (no trailing slash needed, or "" for none). Changeable at runtime via the "Album Folder" text entity in Home Assistant.
-## 04. Set substitution max_images to the maximum amount of images you want to use in the future without having to update this configuration again.
-## 05. Set substitution rotation to 0 if you want to use the device in landscape mode, or 270 if you want to use it in portrait mode.
-## 06. Create a helper boolean in Home Assistant that will control whether this frame goes into deep sleep. Set substitution ha_deep_sleep to this helper's entity name.
-## 07. Optionally adjust substitution deep_sleep_run — the maximum time the device stays awake per cycle. The default of 90 seconds is enough to download and display an image.
-## 08. Upload properly prepared PNG images to the (sub)folder you configured. Number them sequentially, starting at 1.png, followed by 2.png, etc.
-##     This configuration assumes a continuous set of sequentially ascending numbered files, with no gaps.
+## 02. Set substitution ha_www_url to the publicly accessible URL of your www folder,
+##     with trailing slash. This default should work for most people.
+##     For more information, check:
+##     https://www.home-assistant.io/integrations/http/#hosting-files
+## 03. Set substitution album_folder to the initial subfolder name (no trailing slash
+##     needed, or "" for none). Changeable at runtime via the "Album Folder" text
+##     entity in Home Assistant.
+## 04. Set substitution max_images to the maximum number of images you want to use in
+##     the future without having to update this configuration again.
+## 05. Set substitution rotation to 0 for landscape mode, or 270 for portrait mode.
+## 06. Create a helper boolean in Home Assistant to control whether this frame goes into
+##     deep sleep. Set substitution ha_deep_sleep to this helper's entity name.
+## 07. Optionally adjust substitution deep_sleep_run — a safety timeout: the device
+##     normally returns to deep sleep immediately after displaying an image, but this
+##     caps the maximum awake time in case something goes wrong. 90 seconds is well
+##     above typical download+display time.
+## 08. Upload your PNG images to the (sub)folder you configured. Number them 
+##     sequentially: 1.png, 2.png, etc. No gaps — the configuration assumes a
+##     continuous set of sequentially ascending numbered files. Images must be:
+##     - In PNG format
+##     - 1404x1872 pixels for portrait (rotation: 270), or 1872x1404 for landscape
+##     - 16-level grayscale (the IT8951 controller renders 4bpp grayscale)
 ##
 ## INSTALLATION
-## 09. Set your deep sleep helper boolean to off, so you can configure the display after installation.
-## 10. Keep image_history.h in the same folder as config.yaml — it is required for compilation.
+## 09. Set your deep sleep helper boolean to off, so you can configure the display
+##     after installation.
+## 10. Keep image_history.h in the same folder as this yaml — required for compilation.
 ## 11. Install this configuration onto your Seeed reTerminal E1003 display.
 ## 12. Add the display to Home Assistant after it has been discovered.
-## 13. In the display's ESPHome settings, turn on the option "Allow the device to perform Home Assistant actions."
-## 14. In Home Assistant, set the "Total Images" number of this ESPHome device to the highest numbered image you have uploaded.
-##     Update this number if you upload additional (sequentially-numbered) images.
+## 13. In the display's ESPHome settings, turn on "Allow the device to perform Home
+##     Assistant actions."
+## 14. In Home Assistant, set the "Total Images" number of this ESPHome device to the
+##     highest numbered image you have uploaded. Update this if you add more images.
 ## 15. In the display's ESPHome settings, configure the following (no reflashing needed):
-##     - "Refresh Interval" — how often (in whole hours) to wake, aligned to clock boundaries (e.g. 1 = every hour at :00, 6 = at 00:00/06:00/12:00/18:00)
-##     - "Active Hours Start" / "Active Hours End" — window during which refreshes are allowed; wakeups outside this window are skipped to the next boundary inside it.
-##       Set start 0 and end to 23 to run continuously around the clock.
-##     - "Album Folder" — subfolder within /local/ where images are stored; no trailing slash needed, leave empty if images are in /local/ directly.
+##     - "Refresh Interval" — how often (in whole hours) to wake, aligned to clock
+##       boundaries (e.g. 1 = every hour at :00, 6 = at 00:00/06:00/12:00/18:00)
+##     - "Active Hours Start" / "Active Hours End" — window during which refreshes are
+##       allowed; wakeups outside this window are skipped to the next boundary inside.
+##       Set start to 0 and end to 23 to run continuously around the clock.
+##     - "Album Folder" — subfolder within your www folder where images are stored;
+##       no trailing slash needed, leave empty if images are in the www folder directly.
 ##
 ## USAGE
-## 16. Set your deep sleep helper boolean to on, so the display will automatically go through deep sleep cycles. Every time it wakes, it will load a random image.
-## 17. For ease of use, the deep sleep helper boolean is also exposed in the display's ESPHome settings.
-## 18. Press the green button to wake the display out of deep sleep (and load a random image).
-## 19. While the display is awake, you can do the following:
-## 20. Press the white buttons on top of the display to go forward/backward sequentially through your images.
-## 21. Use the buttons in the display's ESPHome settings to go to the next, previous, or a random image.
-## 22. Set the "Current Image" number of this device in Home Assistant to go to that specific numbered image.
-## 23. Turn on the Audio Feedback toggle in the display's ESPHome settings to get buzzer sounds when performing actions.
-## 24. Toggle the Image History switch in the display's ESPHome settings to switch between history-aware random selection
-##     (default, avoids recently shown images) and pure random selection (any image can appear at any time).
-##
-## To prepare images for use on this display, ensure they are:
-## - In PNG format
-## - In 1404x1872 pixel resolution for portrait mode (rotation: 270), or 1872x1404 for landscape (rotation: 0)
-## - In 16-level grayscale (the IT8951 controller in this display renders 4bpp grayscale)
+## 16. Set your deep sleep helper boolean to on. Every time the display wakes, it will
+##     load and display a random image, then immediately return to deep sleep.
+## 17. You can also control deep sleep directly from the display's ESPHome settings.
+## 18. Press the green button to wake the display out of deep sleep (and load a random
+##     image).
+## 19. While awake, press the white buttons on top of the display to step forward/
+##     backward through your images sequentially.
+## 20. While awake, use the buttons in the display's ESPHome settings to go to the
+##     next, previous, or a random image.
+## 21. While awake, set the "Current Image" number of this device in Home Assistant
+##     to jump to that specific numbered image.
+## 22. Turn on the Audio Feedback toggle in the display's ESPHome settings to get
+##     buzzer sounds when performing actions.
+## 23. The Image History switch in the display's ESPHome settings controls random
+##     selection mode: on (default) avoids recently shown images; off picks freely.
 ##
 ## By Guy Sie (https://github.com/guysie)
 ##
@@ -66,7 +85,7 @@ substitutions:
   wifi_ssid: !secret wifi_ssid
   wifi_password: !secret wifi_password
   ha_www_url: "http://homeassistant.local:8123/local/"
-  album_folder: "reterminal"
+  album_folder: ""
   max_images: 1000
   rotation: 0
   ha_deep_sleep: "input_boolean.reterminal_deep_sleep"
