@@ -77,7 +77,7 @@ substitutions:
   name: reterminal-e1003
   friendly_name: "Seeed reTerminal E1003"
   project_name: "Guy Sie.reTerminal E1003 Art Display"
-  project_version: "0.7.0"
+  project_version: "0.8.0"
   api_key: "FILL_IN_API_KEY"
   ota_password: "FILL_IN_OTA_PASSWORD"
   ap_password: "FILL_IN_AP_PASSWORD"
@@ -102,7 +102,20 @@ esphome:
     version: ${project_version}
   includes:
     - image_history.h
+    - <driver/rtc_io.h>
   on_boot:
+# Release all gpio_hold latches before the IT8951 driver's HARDWARE-priority (800) setup() runs
+# power_cycle_() — that routine does a LOW->HIGH cycle on GPIO11 and GPIO21 on every boot.
+    - priority: 900
+      then:
+        - lambda: |-
+            gpio_hold_dis(GPIO_NUM_11);
+            gpio_hold_dis(GPIO_NUM_21);
+            gpio_hold_dis(GPIO_NUM_16);
+            gpio_hold_dis(GPIO_NUM_38);
+            gpio_hold_dis(GPIO_NUM_39);
+            gpio_hold_dis(GPIO_NUM_45);
+            gpio_hold_dis(GPIO_NUM_48);
 # Enable battery voltage measurement and record boot time from RTC
     - priority: 600
       then:
@@ -145,6 +158,45 @@ esphome:
             id(deep_sleep_1).set_sleep_duration(sleep_ms);
             ESP_LOGI("rtc_sleep", "Next wake in %u s at hour %d",
                      (next_secs - now_secs), (next_secs / 3600) % 24);
+# Latch GPIO state before deep sleep to cut SD card and touch controller power draw.
+# Root cause of high sleep current: GPIO39 (SD_EN) and GPIO48 (TOUCH_RES) float HIGH
+# during sleep because bare digitalWrite() calls are silently discarded at sleep entry
+# on the ESP32-S3. gpio_hold_en() latches state into the RTC/digital hold domain.
+# gpio_deep_sleep_hold_en() arms the hold for non-RTC pins (>GPIO21, specifically
+# GPIO38/39/45/48). This call breaks ext0 wakeup — that is why deep_sleep uses ext1.
+    - priority: 50
+      then:
+        - lambda: |-
+            ESP_LOGI("power", "BEFORE - IO21:%d IO11:%d IO38:%d IO45:%d IO16:%d IO39:%d IO48:%d",
+              digitalRead(21), digitalRead(11), digitalRead(38), digitalRead(45),
+              digitalRead(16), digitalRead(39), digitalRead(48));
+
+            // Disable I2C pins — community-confirmed leakage path on GPIO19
+            gpio_set_direction(GPIO_NUM_19, GPIO_MODE_DISABLE);
+            gpio_set_direction(GPIO_NUM_20, GPIO_MODE_DISABLE);
+
+            // RTC-capable pins (<=GPIO21): held via RTC domain
+            pinMode(11, OUTPUT); digitalWrite(11, LOW); gpio_hold_en(GPIO_NUM_11);
+            pinMode(21, OUTPUT); digitalWrite(21, LOW); gpio_hold_en(GPIO_NUM_21);
+
+            // Non-RTC pins (>GPIO21): require gpio_deep_sleep_hold_en()
+            // GPIO16 (USER_LED) excluded — latching it LOW drives LED on via Q4 transistor
+            pinMode(38, OUTPUT); digitalWrite(38, LOW); gpio_hold_en(GPIO_NUM_38);
+            pinMode(39, OUTPUT); digitalWrite(39, LOW); gpio_hold_en(GPIO_NUM_39);
+            pinMode(45, OUTPUT); digitalWrite(45, LOW); gpio_hold_en(GPIO_NUM_45);
+            pinMode(48, OUTPUT); digitalWrite(48, LOW); gpio_hold_en(GPIO_NUM_48);
+
+            // Arm digital hold domain for non-RTC pins (38/39/45/48)
+            gpio_deep_sleep_hold_en();
+
+            // Keep RTC_PERIPH powered for ext1 monitoring; pull-up GPIO3 (green button)
+            esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+            rtc_gpio_pullup_en(GPIO_NUM_3);
+            rtc_gpio_pulldown_dis(GPIO_NUM_3);
+
+            ESP_LOGI("power", "AFTER  - IO21:%d IO11:%d IO38:%d IO39:%d IO48:%d",
+              digitalRead(21), digitalRead(11), digitalRead(38),
+              digitalRead(39), digitalRead(48));
 
 # Enable logging
 logger:
@@ -185,13 +237,18 @@ deep_sleep:
   run_duration: ${deep_sleep_run}
 # sleep_duration is computed dynamically from RTC just before sleep (see on_shutdown lambda above)
 # Green button interrupts deep sleep
-  wakeup_pin: GPIO3
-  wakeup_pin_mode: INVERT_WAKEUP
+# ext1 required because gpio_deep_sleep_hold_en() (applied before sleep) breaks ext0.
+# ANY_LOW is the correct mode for S3 (ALL_LOW is rejected by the ESPHome validator).
+  esp32_ext1_wakeup:
+    pins:
+      - number: GPIO3
+    mode: ANY_LOW
 
 
 ## Hardware configuration (ESP, buttons, sensors, buzzer, LED)
 esp32:
   board: esp32-s3-devkitc-1
+  cpu_frequency: 160MHZ
   framework:
     type: arduino
 

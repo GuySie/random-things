@@ -146,7 +146,7 @@ void IT8951ReTerminalE1003Display::lcd_write_framebuffer_1bpp_(uint16_t width, u
     for (uint16_t x = 0; x < width; x++) {
       const uint8_t nibble = this->get_pixel_nibble_(x, y);
       if (nibble <= 0x07) {
-        row_words[x / 16] |= uint16_t(0x8000 >> (x & 0x0F));
+        row_words[x / 16] |= uint16_t(1 << (x & 0x0F));
       }
     }
 
