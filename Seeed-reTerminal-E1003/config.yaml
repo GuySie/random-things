@@ -77,7 +77,7 @@ substitutions:
   name: reterminal-e1003
   friendly_name: "Seeed reTerminal E1003"
   project_name: "Guy Sie.reTerminal E1003 Art Display"
-  project_version: "0.8.0"
+  project_version: "0.9.0"
   api_key: "FILL_IN_API_KEY"
   ota_password: "FILL_IN_OTA_PASSWORD"
   ap_password: "FILL_IN_AP_PASSWORD"
@@ -104,8 +104,7 @@ esphome:
     - image_history.h
     - <driver/rtc_io.h>
   on_boot:
-# Release all gpio_hold latches before the IT8951 driver's HARDWARE-priority (800) setup() runs
-# power_cycle_() — that routine does a LOW->HIGH cycle on GPIO11 and GPIO21 on every boot.
+# Release all GPIO latches from deep sleep 
     - priority: 900
       then:
         - lambda: |-
@@ -158,12 +157,7 @@ esphome:
             id(deep_sleep_1).set_sleep_duration(sleep_ms);
             ESP_LOGI("rtc_sleep", "Next wake in %u s at hour %d",
                      (next_secs - now_secs), (next_secs / 3600) % 24);
-# Latch GPIO state before deep sleep to cut SD card and touch controller power draw.
-# Root cause of high sleep current: GPIO39 (SD_EN) and GPIO48 (TOUCH_RES) float HIGH
-# during sleep because bare digitalWrite() calls are silently discarded at sleep entry
-# on the ESP32-S3. gpio_hold_en() latches state into the RTC/digital hold domain.
-# gpio_deep_sleep_hold_en() arms the hold for non-RTC pins (>GPIO21, specifically
-# GPIO38/39/45/48). This call breaks ext0 wakeup — that is why deep_sleep uses ext1.
+# Latch GPIO states before deep sleep to prevent SD card and touch controller from drawing power during deep sleep
     - priority: 50
       then:
         - lambda: |-
@@ -235,10 +229,9 @@ http_request:
 deep_sleep:
   id: deep_sleep_1
   run_duration: ${deep_sleep_run}
-# sleep_duration is computed dynamically from RTC just before sleep (see on_shutdown lambda above)
+# sleep_duration is computed dynamically from RTC just before deep sleep (see on_shutdown lambda above)
 # Green button interrupts deep sleep
-# ext1 required because gpio_deep_sleep_hold_en() (applied before sleep) breaks ext0.
-# ANY_LOW is the correct mode for S3 (ALL_LOW is rejected by the ESPHome validator).
+# ext1 required because gpio_deep_sleep_hold_en() (applied before deep sleep) breaks ext0
   esp32_ext1_wakeup:
     pins:
       - number: GPIO3
