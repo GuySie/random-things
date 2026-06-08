@@ -24,6 +24,10 @@ Number images sequentially with no gaps: `1.png`, `2.png`, `3.png`, etc.
 
 ESPHome currently does not provide support for the IT8951 controller used in the E1003, so we provide a local component. This component is a modification of the [code by koosoli](https://github.com/esphome/esphome/pull/15415), modified using Claude Code to work specifically for this art frame purpose. No guarantees it will work for anything else.
 
+## Deep sleep optimization
+
+Some great investigative work by [u/ar0v3r](https://www.reddit.com/r/homeassistant/comments/1tqy14f/comment/op6c8i9/) revealed that the SD-card and touch controllers were still drawing power during deep sleep. I've implemented their fixes in v0.8.0 of this configuration and have cut power consumption during deep sleep by half! Many thanks to u/ar0v3r.
+
 ## AI warning
 
 While this is based on an original configuration for the Seeed reTerminal E1002 that I wrote manually, this version for the E1003 was made with heavy assistance from Claude Code. If you are against using AI-generated code please do not install this.
