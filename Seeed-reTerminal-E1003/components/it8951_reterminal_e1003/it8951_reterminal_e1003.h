@@ -61,6 +61,13 @@ class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
   void setup() override;
   void update() override;
   void dump_config() override;
+
+  // Full-screen INIT + GC16 refresh (flash). Used at boot and for the nightly
+  // deghost. Resets the partial-refresh counter.
+  void full_refresh();
+  // Refresh ONLY the given logical rectangle (lambda coordinates) with a fast
+  // waveform (default mode 1 = DU, no flash). Re-renders the framebuffer first.
+  void refresh_zone(int x, int y, int w, int h, int mode = 1);
   float get_setup_priority() const override { return setup_priority::HARDWARE; }
 
   display::DisplayType get_display_type() override { return display::DisplayType::DISPLAY_TYPE_GRAYSCALE; }
@@ -77,6 +84,9 @@ class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
   void lcd_write_n_data_(uint16_t *buf, uint32_t word_count);
   void lcd_write_framebuffer_4bpp_(uint16_t *buf, uint16_t width_in_words, uint16_t height);
   void lcd_write_framebuffer_1bpp_(uint16_t width, uint16_t height);
+  void lcd_write_framebuffer_4bpp_area_(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
+  void wake_panel_();
+  void sleep_panel_();
   uint16_t lcd_read_data_();
   void lcd_read_n_data_(uint16_t *buf, uint32_t word_count);
   void lcd_wait_for_ready_();
@@ -119,6 +129,8 @@ class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
   bool it8951_sleeping_{false};
   int8_t temperature_{23};
   uint32_t spi_read_frequency_{1000000};
+  uint32_t partials_since_full_{0};
+  static const uint32_t MAX_PARTIALS_BEFORE_FULL = 60;
 };
 
 }  // namespace it8951_reterminal_e1003

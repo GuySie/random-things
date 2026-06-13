@@ -433,12 +433,9 @@ void IT8951ReTerminalE1003Display::draw_driver_test_pattern_() {
   }
 }
 
-void IT8951ReTerminalE1003Display::update() {
-  if (this->framebuffer_ == nullptr) {
-    ESP_LOGW(TAG, "Skipping update because the framebuffer is not available");
-    return;
-  }
+void IT8951ReTerminalE1003Display::update() { this->full_refresh(); }
 
+void IT8951ReTerminalE1003Display::wake_panel_() {
   if (this->it8951_sleeping_) {
     ESP_LOGD(TAG, "Waking IT8951 from inter-refresh sleep");
     digitalWrite(IT8951_PIN_EN, HIGH);
@@ -446,6 +443,22 @@ void IT8951ReTerminalE1003Display::update() {
     this->lcd_sys_run_();
     this->it8951_sleeping_ = false;
   }
+}
+
+void IT8951ReTerminalE1003Display::sleep_panel_() {
+  this->lcd_write_cmd_code_(IT8951_TCON_SLEEP);
+  digitalWrite(IT8951_PIN_EN, LOW);
+  this->it8951_sleeping_ = true;
+  ESP_LOGD(TAG, "IT8951 sleeping, EPD_Drive power cut");
+}
+
+void IT8951ReTerminalE1003Display::full_refresh() {
+  if (this->framebuffer_ == nullptr) {
+    ESP_LOGW(TAG, "Skipping update because the framebuffer is not available");
+    return;
+  }
+
+  this->wake_panel_();
 
   this->do_update_();
   this->log_framebuffer_stats_();
@@ -454,7 +467,7 @@ void IT8951ReTerminalE1003Display::update() {
     this->log_framebuffer_stats_();
   }
 
-  ESP_LOGD(TAG, "Transferring image to IT8951...");
+  ESP_LOGD(TAG, "Transferring full image to IT8951...");
 
   const uint16_t w = this->get_width_internal();
   const uint16_t h = this->get_height_internal();
@@ -474,16 +487,13 @@ void IT8951ReTerminalE1003Display::update() {
     const uint16_t one_bpp_width_bytes = w / 8;
     ESP_LOGD(TAG, "Using sharp 1bpp upload path");
     this->it8951_load_img_area_start_(IT8951_LDIMG_L_ENDIAN, IT8951_8BPP, 0, 0, 0, one_bpp_width_bytes, h);
-    ESP_LOGD(TAG, "Uploading %u rows x %u packed bytes", h, one_bpp_width_bytes);
     this->lcd_write_framebuffer_1bpp_(w, h);
   } else {
     ESP_LOGD(TAG, "Using 4bpp grayscale upload path");
     this->it8951_load_img_area_start_(IT8951_LDIMG_L_ENDIAN, IT8951_4BPP, 0, 0, 0, w, h);
-    ESP_LOGD(TAG, "Uploading %u rows x %u words", h, width_in_words);
     this->lcd_write_framebuffer_4bpp_(reinterpret_cast<uint16_t *>(this->framebuffer_), width_in_words, h);
   }
 
-  ESP_LOGD(TAG, "Framebuffer upload complete");
   this->lcd_write_cmd_code_(IT8951_TCON_LD_IMG_END);
 
   // INIT pass (mode 0) fully discharges residual pixel state from the previous image,
@@ -501,12 +511,111 @@ void IT8951ReTerminalE1003Display::update() {
   }
   this->first_update_ = false;
 
-  this->lcd_write_cmd_code_(IT8951_TCON_SLEEP);
-  digitalWrite(IT8951_PIN_EN, LOW);
-  this->it8951_sleeping_ = true;
-  ESP_LOGD(TAG, "IT8951 sleeping, EPD_Drive power cut");
+  this->sleep_panel_();
+  this->partials_since_full_ = 0;
+}
 
-  ESP_LOGV(TAG, "Display update triggered");
+// Upload only a sub-rectangle of the framebuffer in 4bpp. x and w MUST be
+// multiples of 4 (4 pixels per 16-bit word). Byte order matches
+// lcd_write_framebuffer_4bpp_ (MSB-first per word).
+void IT8951ReTerminalE1003Display::lcd_write_framebuffer_4bpp_area_(uint16_t x, uint16_t y, uint16_t w,
+                                                                    uint16_t h) {
+  const uint16_t words = w / 4;
+  const uint32_t row_size_bytes = uint32_t(words) * 2;
+  uint8_t row_buffer[936];
+  if (row_size_bytes > sizeof(row_buffer)) {
+    ESP_LOGE(TAG, "Area row buffer too small for %u-byte transfer", static_cast<unsigned>(row_size_bytes));
+    return;
+  }
+  const uint32_t fb_row_bytes = uint32_t(this->get_width_internal()) / 2;
+  const uint32_t x_byte = uint32_t(x) / 2;
+
+  digitalWrite(IT8951_PIN_CS, LOW);
+  SPI.beginTransaction(SPISettings(this->spi_frequency_, MSBFIRST, SPI_MODE0));
+  this->lcd_wait_for_ready_();
+  this->spi_send_word_(0x0000);
+  this->lcd_wait_for_ready_();
+
+  for (uint16_t yy = 0; yy < h; yy++) {
+    const uint8_t *src = this->framebuffer_ + (uint32_t(y) + yy) * fb_row_bytes + x_byte;
+    for (uint16_t i = 0; i < words; i++) {
+      const uint8_t b0 = src[uint32_t(i) * 2];
+      const uint8_t b1 = src[uint32_t(i) * 2 + 1];
+      row_buffer[uint32_t(i) * 2] = b1;
+      row_buffer[uint32_t(i) * 2 + 1] = b0;
+    }
+    SPI.writeBytes(row_buffer, row_size_bytes);
+    if ((yy & 0x07) == 0) {
+      App.feed_wdt();
+    }
+  }
+
+  SPI.endTransaction();
+  digitalWrite(IT8951_PIN_CS, HIGH);
+}
+
+void IT8951ReTerminalE1003Display::refresh_zone(int lx, int ly, int lw, int lh, int mode) {
+  if (this->framebuffer_ == nullptr || lw <= 0 || lh <= 0) {
+    return;
+  }
+  const int panel_w = this->get_width_internal();
+  const int panel_h = this->get_height_internal();
+
+  // The framebuffer is mirrored in X (see draw_absolute_pixel_internal):
+  // logical column lx maps to panel column panel_w - 1 - lx. Convert the
+  // logical rectangle to panel coordinates, then align x/w to 4 px (4bpp).
+  int px = panel_w - lx - lw;
+  int pend = px + lw;
+  if (px < 0) px = 0;
+  if (pend > panel_w) pend = panel_w;
+  px &= ~0x03;
+  pend = (pend + 3) & ~0x03;
+  const int pw = pend - px;
+
+  int y = ly;
+  int h = lh;
+  if (y < 0) {
+    h += y;
+    y = 0;
+  }
+  if (y + h > panel_h) {
+    h = panel_h - y;
+  }
+  if (pw <= 0 || h <= 0) {
+    return;
+  }
+
+  this->wake_panel_();
+  // Re-render the full framebuffer so the zone reflects current sensor values;
+  // only the rectangle below is physically pushed to the panel.
+  this->do_update_();
+  this->wait_for_display_ready_();
+
+  this->lcd_write_cmd_code_(USDEF_I80_CMD_TEMP);
+  this->lcd_write_data_(0x0001);  // Force Set from host
+  this->lcd_write_data_(static_cast<uint16_t>(this->temperature_));
+
+  this->it8951_write_reg_(UP1SR + 2, this->it8951_read_reg_(UP1SR + 2) & ~(1 << 2));
+  this->set_img_buf_base_addr_(this->img_buf_addr_);
+  this->it8951_load_img_area_start_(IT8951_LDIMG_L_ENDIAN, IT8951_4BPP, 0, static_cast<uint16_t>(px),
+                                    static_cast<uint16_t>(y), static_cast<uint16_t>(pw),
+                                    static_cast<uint16_t>(h));
+  this->lcd_write_framebuffer_4bpp_area_(static_cast<uint16_t>(px), static_cast<uint16_t>(y),
+                                         static_cast<uint16_t>(pw), static_cast<uint16_t>(h));
+  this->lcd_write_cmd_code_(IT8951_TCON_LD_IMG_END);
+  this->wait_for_display_ready_();
+
+  ESP_LOGD(TAG, "Zone refresh panel x=%d y=%d w=%d h=%d mode=%d", px, y, pw, h, mode);
+  this->it8951_display_area_(static_cast<uint16_t>(px), static_cast<uint16_t>(y), static_cast<uint16_t>(pw),
+                             static_cast<uint16_t>(h), static_cast<uint16_t>(mode));
+  this->wait_for_display_ready_();
+
+  this->sleep_panel_();
+
+  if (++this->partials_since_full_ >= MAX_PARTIALS_BEFORE_FULL) {
+    ESP_LOGD(TAG, "Partial threshold reached, forcing full refresh to purge ghosting");
+    this->full_refresh();
+  }
 }
 
 void IT8951ReTerminalE1003Display::dump_config() {
