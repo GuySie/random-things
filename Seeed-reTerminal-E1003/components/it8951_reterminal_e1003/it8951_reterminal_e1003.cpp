@@ -554,7 +554,21 @@ void IT8951ReTerminalE1003Display::lcd_write_framebuffer_4bpp_area_(uint16_t x, 
   digitalWrite(IT8951_PIN_CS, HIGH);
 }
 
+void IT8951ReTerminalE1003Display::render_framebuffer() {
+  if (this->framebuffer_ == nullptr) {
+    return;
+  }
+  // Runs the display lambda once. Heavy on PSRAM (~seconds); do this ONCE then
+  // call flush_zone() for each zone rather than re-rendering per zone.
+  this->do_update_();
+}
+
 void IT8951ReTerminalE1003Display::refresh_zone(int lx, int ly, int lw, int lh, int mode) {
+  this->render_framebuffer();
+  this->flush_zone(lx, ly, lw, lh, mode);
+}
+
+void IT8951ReTerminalE1003Display::flush_zone(int lx, int ly, int lw, int lh, int mode) {
   if (this->framebuffer_ == nullptr || lw <= 0 || lh <= 0) {
     return;
   }
@@ -586,9 +600,6 @@ void IT8951ReTerminalE1003Display::refresh_zone(int lx, int ly, int lw, int lh, 
   }
 
   this->wake_panel_();
-  // Re-render the full framebuffer so the zone reflects current sensor values;
-  // only the rectangle below is physically pushed to the panel.
-  this->do_update_();
   this->wait_for_display_ready_();
 
   this->lcd_write_cmd_code_(USDEF_I80_CMD_TEMP);

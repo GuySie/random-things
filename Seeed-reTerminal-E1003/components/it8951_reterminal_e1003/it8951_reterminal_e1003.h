@@ -65,8 +65,14 @@ class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
   // Full-screen INIT + GC16 refresh (flash). Used at boot and for the nightly
   // deghost. Resets the partial-refresh counter.
   void full_refresh();
-  // Refresh ONLY the given logical rectangle (lambda coordinates) with a fast
-  // waveform (default mode 1 = DU, no flash). Re-renders the framebuffer first.
+  // Re-render the whole framebuffer in RAM (runs the display lambda once). Cheap
+  // on CPU but NOT on PSRAM (~seconds); call ONCE then flush_zone() several times.
+  void render_framebuffer();
+  // Push ONLY the given logical rectangle (lambda coordinates) to the panel with
+  // a fast waveform (default mode 1 = DU, no flash). Does NOT re-render; assumes
+  // the framebuffer is current (call render_framebuffer() first).
+  void flush_zone(int x, int y, int w, int h, int mode = 1);
+  // Convenience: render_framebuffer() + flush_zone() for a single isolated zone.
   void refresh_zone(int x, int y, int w, int h, int mode = 1);
   float get_setup_priority() const override { return setup_priority::HARDWARE; }
 
