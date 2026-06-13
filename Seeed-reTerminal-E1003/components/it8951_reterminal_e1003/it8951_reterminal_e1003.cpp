@@ -648,6 +648,16 @@ void IT8951ReTerminalE1003Display::dump_config() {
   LOG_UPDATE_INTERVAL(this);
 }
 
+void IT8951ReTerminalE1003Display::fill(Color color) {
+  if (this->framebuffer_ == nullptr) {
+    return;
+  }
+  const uint8_t gray8 = static_cast<uint8_t>((77u * color.r + 150u * color.g + 29u * color.b) >> 8);
+  const uint8_t nib = gray8 >> 4;
+  const uint8_t byte = static_cast<uint8_t>((nib << 4) | nib);
+  memset(this->framebuffer_, byte, static_cast<size_t>(this->get_width_internal()) * this->get_height_internal() / 2);
+}
+
 void IT8951ReTerminalE1003Display::draw_absolute_pixel_internal(int x, int y, Color color) {
   if (x < 0 || x >= this->get_width() || y < 0 || y >= this->get_height()) {
     return;
