@@ -757,7 +757,7 @@ void IT8951ReTerminalE1003Display::it8951_display_area_1bpp_(uint16_t x, uint16_
 void IT8951ReTerminalE1003Display::show_sd_image(const char *path) {
   if (this->framebuffer_ == nullptr) { ESP_LOGW(TAG, "show_sd_image: framebuffer absent"); return; }
   if (!this->sd_ok_) { ESP_LOGW(TAG, "show_sd_image: SD non initialisee"); return; }
-  File32 f = this->sd_.open(path, O_RDONLY);
+  FsFile f = this->sd_.open(path, O_RDONLY);
   if (!f) { ESP_LOGW(TAG, "show_sd_image: ouverture echouee %s", path); return; }
   const size_t need = (size_t) this->get_width_internal() * this->get_height_internal() / 2;
   size_t got = 0;
