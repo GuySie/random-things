@@ -1,7 +1,7 @@
 #pragma once
 
 #include "SPI.h"
-#include "SD.h"
+#include "SdFat.h"
 #include "driver/gpio.h"
 #include "esphome/components/display/display_buffer.h"
 #include "esphome/core/component.h"
@@ -144,6 +144,7 @@ class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
   bool it8951_sleeping_{false};
   int8_t temperature_{23};
   uint32_t spi_read_frequency_{1000000};
+  SdFat sd_;
   bool sd_ok_{false};
   uint32_t partials_since_full_{0};
   static const uint32_t MAX_PARTIALS_BEFORE_FULL = 180;
