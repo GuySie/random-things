@@ -349,6 +349,13 @@ void IT8951ReTerminalE1003Display::setup() {
   }
   memset(this->framebuffer_, 0xFF, buffer_size);
 
+  // Carte SD sur le bus SPI partage (CS=14). Alimentation SD = GPIO39 (SD_EN).
+  pinMode(IT8951_PIN_SD_EN, OUTPUT);
+  digitalWrite(IT8951_PIN_SD_EN, HIGH);
+  delay(10);
+  this->sd_ok_ = SD.begin(IT8951_PIN_SD_CS, SPI, 10000000);
+  ESP_LOGCONFIG(TAG, "SD card: %s", this->sd_ok_ ? "OK" : "absente/echec init");
+
   ESP_LOGCONFIG(TAG, "IT8951 reTerminal E1003 initialization complete");
 }
 
@@ -745,6 +752,46 @@ void IT8951ReTerminalE1003Display::it8951_display_area_1bpp_(uint16_t x, uint16_
   this->it8951_write_reg_(BGVR, (uint16_t(bg_gray) << 8) | fg_gray);
   this->it8951_display_area_(x, y, w, h, mode);
   this->wait_for_display_ready_();
+}
+
+void IT8951ReTerminalE1003Display::show_sd_image(const char *path) {
+  if (this->framebuffer_ == nullptr) { ESP_LOGW(TAG, "show_sd_image: framebuffer absent"); return; }
+  if (!this->sd_ok_) { ESP_LOGW(TAG, "show_sd_image: SD non initialisee"); return; }
+  File f = SD.open(path, FILE_READ);
+  if (!f) { ESP_LOGW(TAG, "show_sd_image: ouverture echouee %s", path); return; }
+  const size_t need = (size_t) this->get_width_internal() * this->get_height_internal() / 2;
+  size_t got = 0;
+  while (got < need) {
+    size_t chunk = (need - got > 4096) ? 4096 : (need - got);
+    int rd = f.read(this->framebuffer_ + got, chunk);
+    if (rd <= 0) break;
+    got += rd;
+    if ((got & 0x3FFF) == 0) App.feed_wdt();
+  }
+  f.close();
+  ESP_LOGI(TAG, "show_sd_image %s: %u/%u octets lus", path, (unsigned) got, (unsigned) need);
+  if (got < need) memset(this->framebuffer_ + got, 0xFF, need - got);
+
+  // Pousse le framebuffer en GC16 (photo = 16 gris, chemin 4bpp).
+  this->wake_panel_();
+  const uint16_t w = this->get_width_internal();
+  const uint16_t h = this->get_height_internal();
+  const uint16_t width_in_words = (w + 3) / 4;
+  this->wait_for_display_ready_();
+  this->lcd_write_cmd_code_(USDEF_I80_CMD_TEMP);
+  this->lcd_write_data_(0x0001);
+  this->lcd_write_data_(static_cast<uint16_t>(this->temperature_));
+  this->it8951_write_reg_(UP1SR + 2, this->it8951_read_reg_(UP1SR + 2) & ~(1 << 2));
+  this->set_img_buf_base_addr_(this->img_buf_addr_);
+  this->it8951_load_img_area_start_(IT8951_LDIMG_L_ENDIAN, IT8951_4BPP, 0, 0, 0, w, h);
+  this->lcd_write_framebuffer_4bpp_(reinterpret_cast<uint16_t *>(this->framebuffer_), width_in_words, h);
+  this->lcd_write_cmd_code_(IT8951_TCON_LD_IMG_END);
+  this->it8951_display_area_(0, 0, w, h, 0);  // INIT (purge ghost)
+  this->wait_for_display_ready_();
+  this->it8951_display_area_(0, 0, w, h, 2);  // GC16 (16 gris)
+  this->wait_for_display_ready_();
+  this->sleep_panel_();
+  this->partials_since_full_ = 0;
 }
 
 }  // namespace it8951_reterminal_e1003

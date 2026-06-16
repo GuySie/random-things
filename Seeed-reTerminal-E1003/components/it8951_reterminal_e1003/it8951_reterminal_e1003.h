@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SPI.h"
+#include "SD.h"
 #include "driver/gpio.h"
 #include "esphome/components/display/display_buffer.h"
 #include "esphome/core/component.h"
@@ -18,6 +19,8 @@ static const gpio_num_t IT8951_PIN_BUSY = GPIO_NUM_13;
 static const gpio_num_t IT8951_PIN_EN = GPIO_NUM_11;
 static const gpio_num_t IT8951_PIN_RST = GPIO_NUM_12;
 static const gpio_num_t IT8951_PIN_ITE_EN = GPIO_NUM_21;
+static const gpio_num_t IT8951_PIN_SD_CS = GPIO_NUM_14;   // SD CS (bus SPI partage)
+static const gpio_num_t IT8951_PIN_SD_EN = GPIO_NUM_39;   // SD power enable (U13)
 
 #define IT8951_TCON_SYS_RUN      0x0001
 #define IT8951_TCON_STANDBY      0x0002
@@ -77,6 +80,9 @@ class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
   void flush_zone(int x, int y, int w, int h, int mode = 1);
   // Convenience: render_framebuffer() + flush_zone() for a single isolated zone.
   void refresh_zone(int x, int y, int w, int h, int mode = 1);
+  // Lit un .raw (1872x1404 4bpp, format framebuffer) depuis la SD et l'affiche
+  // en GC16 (16 gris). Chemin racine SD ex: "/1.raw".
+  void show_sd_image(const char *path);
   float get_setup_priority() const override { return setup_priority::HARDWARE; }
 
   display::DisplayType get_display_type() override { return display::DisplayType::DISPLAY_TYPE_GRAYSCALE; }
@@ -138,6 +144,7 @@ class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
   bool it8951_sleeping_{false};
   int8_t temperature_{23};
   uint32_t spi_read_frequency_{1000000};
+  bool sd_ok_{false};
   uint32_t partials_since_full_{0};
   static const uint32_t MAX_PARTIALS_BEFORE_FULL = 180;
 };
