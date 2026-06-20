@@ -83,6 +83,17 @@ class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
   // Lit un .raw (1872x1404 4bpp, format framebuffer) depuis la SD et l'affiche
   // en GC16 (16 gris). Chemin racine SD ex: "/1.raw".
   void show_sd_image(const char *path);
+  // Vrai si le fichier existe sur la SD (test de presence du cache miniature).
+  bool sd_file_exists(const char *path);
+  // Genere une miniature (sous-echantillon nearest x THUMB_FACTOR) a partir d'un
+  // .raw plein ecran et l'ecrit sur la SD (format 4bpp row-major LOGIQUE,
+  // THUMB_W x THUMB_H). ECRASE le framebuffer (chargement de la source) -> a
+  // appeler AVANT de dessiner un ecran, jamais pendant un rendu.
+  void make_thumbnail(const char *src_path, const char *dst_path);
+  // Dessine une miniature SD dans le framebuffer au coin logique (dx,dy). Ne
+  // declenche AUCUN refresh: ecrit seulement les pixels (a appeler depuis le
+  // lambda d'affichage, avant le push GC16).
+  void draw_sd_thumbnail(const char *path, int dx, int dy);
   float get_setup_priority() const override { return setup_priority::HARDWARE; }
 
   display::DisplayType get_display_type() override { return display::DisplayType::DISPLAY_TYPE_GRAYSCALE; }
@@ -114,6 +125,9 @@ class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
   bool framebuffer_is_binary_();
   void draw_driver_test_pattern_();
   uint8_t get_pixel_nibble_(uint16_t x, uint16_t y);
+  // Lecture/ecriture en coordonnees LOGIQUES (mirror X comme draw_absolute_pixel_internal).
+  uint8_t get_pixel_logical_(int x, int y);
+  void set_pixel_nibble_(int x, int y, uint8_t nibble);
 
   void lcd_send_cmd_arg_(uint16_t cmd, uint16_t *args, uint16_t num_args);
   uint16_t it8951_read_reg_(uint16_t addr);
@@ -148,6 +162,10 @@ class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
   bool sd_ok_{false};
   uint32_t partials_since_full_{0};
   static const uint32_t MAX_PARTIALS_BEFORE_FULL = 180;
+  // Miniatures: sous-echantillon entier de l'image plein ecran (1872x1404).
+  static const int THUMB_FACTOR = 4;
+  static const int THUMB_W = 1872 / THUMB_FACTOR;  // 468
+  static const int THUMB_H = 1404 / THUMB_FACTOR;  // 351
 };
 
 }  // namespace it8951_reterminal_e1003

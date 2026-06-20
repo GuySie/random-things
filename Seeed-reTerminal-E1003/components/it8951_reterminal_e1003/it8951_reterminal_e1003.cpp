@@ -693,6 +693,28 @@ uint8_t IT8951ReTerminalE1003Display::get_pixel_nibble_(uint16_t x, uint16_t y) 
   return this->framebuffer_[pos] >> 4;
 }
 
+// Lecture en coordonnees LOGIQUES: applique le meme mirror X que
+// draw_absolute_pixel_internal (qui stocke l'image inversee en X).
+uint8_t IT8951ReTerminalE1003Display::get_pixel_logical_(int x, int y) {
+  return this->get_pixel_nibble_(static_cast<uint16_t>(this->get_width() - 1 - x), static_cast<uint16_t>(y));
+}
+
+// Ecriture d'un nibble (0=noir .. 0x0F=blanc) en coordonnees LOGIQUES, meme
+// mapping que draw_absolute_pixel_internal mais sans conversion de couleur.
+void IT8951ReTerminalE1003Display::set_pixel_nibble_(int x, int y, uint8_t nibble) {
+  if (x < 0 || x >= this->get_width() || y < 0 || y >= this->get_height() || this->framebuffer_ == nullptr) {
+    return;
+  }
+  x = this->get_width() - 1 - x;
+  const uint32_t pos = (x + y * this->get_width()) / 2;
+  nibble &= 0x0F;
+  if ((x % 2) == 0) {
+    this->framebuffer_[pos] = (this->framebuffer_[pos] & 0xF0) | nibble;
+  } else {
+    this->framebuffer_[pos] = (this->framebuffer_[pos] & 0x0F) | (nibble << 4);
+  }
+}
+
 void IT8951ReTerminalE1003Display::lcd_send_cmd_arg_(uint16_t cmd, uint16_t *args, uint16_t num_args) {
   this->lcd_write_cmd_code_(cmd);
   for (uint16_t i = 0; i < num_args; i++) {
@@ -792,6 +814,95 @@ void IT8951ReTerminalE1003Display::show_sd_image(const char *path) {
   this->wait_for_display_ready_();
   this->sleep_panel_();
   this->partials_since_full_ = 0;
+}
+
+bool IT8951ReTerminalE1003Display::sd_file_exists(const char *path) {
+  if (!this->sd_ok_) {
+    return false;
+  }
+  return this->sd_.exists(path);
+}
+
+void IT8951ReTerminalE1003Display::make_thumbnail(const char *src_path, const char *dst_path) {
+  if (this->framebuffer_ == nullptr) {
+    ESP_LOGW(TAG, "make_thumbnail: framebuffer absent");
+    return;
+  }
+  if (!this->sd_ok_) {
+    ESP_LOGW(TAG, "make_thumbnail: SD non initialisee");
+    return;
+  }
+  // 1) Charger la source plein ecran dans le framebuffer (meme boucle que show_sd_image).
+  FsFile f = this->sd_.open(src_path, O_RDONLY);
+  if (!f) {
+    ESP_LOGW(TAG, "make_thumbnail: ouverture source echouee %s", src_path);
+    return;
+  }
+  const size_t need = (size_t) this->get_width_internal() * this->get_height_internal() / 2;
+  size_t got = 0;
+  while (got < need) {
+    size_t chunk = (need - got > 4096) ? 4096 : (need - got);
+    int rd = f.read(this->framebuffer_ + got, chunk);
+    if (rd <= 0)
+      break;
+    got += rd;
+    if ((got & 0x3FFF) == 0)
+      App.feed_wdt();
+  }
+  f.close();
+  if (got < need) {
+    memset(this->framebuffer_ + got, 0xFF, need - got);
+  }
+
+  // 2) Sous-echantillonner (nearest) en lisant des pixels LOGIQUES, empaqueter
+  //    2 pixels/octet en row-major LOGIQUE -> meme convention que draw_sd_thumbnail.
+  FsFile o = this->sd_.open(dst_path, O_WRONLY | O_CREAT | O_TRUNC);
+  if (!o) {
+    ESP_LOGW(TAG, "make_thumbnail: creation dst echouee %s", dst_path);
+    return;
+  }
+  const int row_bytes = THUMB_W / 2;  // 234
+  uint8_t row[THUMB_W / 2];
+  for (int ty = 0; ty < THUMB_H; ty++) {
+    const int sy = ty * THUMB_FACTOR;
+    for (int i = 0; i < row_bytes; i++) {
+      const int tx = i * 2;
+      const uint8_t lo = this->get_pixel_logical_(tx * THUMB_FACTOR, sy);
+      const uint8_t hi = this->get_pixel_logical_((tx + 1) * THUMB_FACTOR, sy);
+      row[i] = (lo & 0x0F) | (hi << 4);
+    }
+    o.write(row, row_bytes);
+    if ((ty & 0x1F) == 0)
+      App.feed_wdt();
+  }
+  o.close();
+  ESP_LOGI(TAG, "make_thumbnail %s -> %s (%dx%d)", src_path, dst_path, THUMB_W, THUMB_H);
+}
+
+void IT8951ReTerminalE1003Display::draw_sd_thumbnail(const char *path, int dx, int dy) {
+  if (this->framebuffer_ == nullptr || !this->sd_ok_) {
+    return;
+  }
+  FsFile f = this->sd_.open(path, O_RDONLY);
+  if (!f) {
+    ESP_LOGW(TAG, "draw_sd_thumbnail: ouverture echouee %s", path);
+    return;
+  }
+  const int row_bytes = THUMB_W / 2;  // 234
+  uint8_t row[THUMB_W / 2];
+  for (int ty = 0; ty < THUMB_H; ty++) {
+    int rd = f.read(row, row_bytes);
+    if (rd < row_bytes)
+      break;
+    for (int i = 0; i < row_bytes; i++) {
+      const int tx = i * 2;
+      this->set_pixel_nibble_(dx + tx, dy + ty, row[i] & 0x0F);
+      this->set_pixel_nibble_(dx + tx + 1, dy + ty, row[i] >> 4);
+    }
+    if ((ty & 0x1F) == 0)
+      App.feed_wdt();
+  }
+  f.close();
 }
 
 }  // namespace it8951_reterminal_e1003
