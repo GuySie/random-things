@@ -26,7 +26,7 @@ ESPHome currently does not provide support for the IT8951 controller used in the
 
 ## Deep sleep optimization
 
-Some great investigative work by [u/ar0v3r](https://www.reddit.com/r/homeassistant/comments/1tqy14f/comment/op6c8i9/) revealed that the SD-card and touch controllers were still drawing power during deep sleep. I've implemented their fixes in v0.8.0 of this configuration and have cut power consumption during deep sleep by half! Many thanks to u/ar0v3r.
+Some great investigative work by [ar0v3r](https://github.com/ar0v3r/reTerminal-E1003-ESPHome/) revealed that the SD-card and touch controllers were still drawing power during deep sleep. I've implemented their fixes in v0.8.0 of this configuration and have cut power consumption during deep sleep by half! Many thanks to u/ar0v3r.
 
 ## AI warning
 
