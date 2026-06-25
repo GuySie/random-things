@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SPI.h"
+#include "SdFat.h"
 #include "driver/gpio.h"
 #include "esphome/components/display/display_buffer.h"
 #include "esphome/core/component.h"
@@ -18,6 +19,8 @@ static const gpio_num_t IT8951_PIN_BUSY = GPIO_NUM_13;
 static const gpio_num_t IT8951_PIN_EN = GPIO_NUM_11;
 static const gpio_num_t IT8951_PIN_RST = GPIO_NUM_12;
 static const gpio_num_t IT8951_PIN_ITE_EN = GPIO_NUM_21;
+static const gpio_num_t IT8951_PIN_SD_CS = GPIO_NUM_14;   // SD CS (bus SPI partage)
+static const gpio_num_t IT8951_PIN_SD_EN = GPIO_NUM_39;   // SD power enable (U13)
 
 #define IT8951_TCON_SYS_RUN      0x0001
 #define IT8951_TCON_STANDBY      0x0002
@@ -61,6 +64,36 @@ class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
   void setup() override;
   void update() override;
   void dump_config() override;
+  // Fast uniform clear (memset) instead of the base per-pixel loop (~2.6M calls
+  // on this panel). Makes the per-frame auto-clear ~instant.
+  void fill(Color color) override;
+
+  // Full-screen INIT + GC16 refresh (flash). Used at boot and for the nightly
+  // deghost. Resets the partial-refresh counter.
+  void full_refresh();
+  // Re-render the whole framebuffer in RAM (runs the display lambda once). Cheap
+  // on CPU but NOT on PSRAM (~seconds); call ONCE then flush_zone() several times.
+  void render_framebuffer();
+  // Push ONLY the given logical rectangle (lambda coordinates) to the panel with
+  // a fast waveform (default mode 1 = DU, no flash). Does NOT re-render; assumes
+  // the framebuffer is current (call render_framebuffer() first).
+  void flush_zone(int x, int y, int w, int h, int mode = 1);
+  // Convenience: render_framebuffer() + flush_zone() for a single isolated zone.
+  void refresh_zone(int x, int y, int w, int h, int mode = 1);
+  // Lit un .raw (1872x1404 4bpp, format framebuffer) depuis la SD et l'affiche
+  // en GC16 (16 gris). Chemin racine SD ex: "/1.raw".
+  void show_sd_image(const char *path);
+  // Vrai si le fichier existe sur la SD (test de presence du cache miniature).
+  bool sd_file_exists(const char *path);
+  // Genere une miniature (sous-echantillon nearest x THUMB_FACTOR) a partir d'un
+  // .raw plein ecran et l'ecrit sur la SD (format 4bpp row-major LOGIQUE,
+  // THUMB_W x THUMB_H). ECRASE le framebuffer (chargement de la source) -> a
+  // appeler AVANT de dessiner un ecran, jamais pendant un rendu.
+  void make_thumbnail(const char *src_path, const char *dst_path);
+  // Dessine une miniature SD dans le framebuffer au coin logique (dx,dy). Ne
+  // declenche AUCUN refresh: ecrit seulement les pixels (a appeler depuis le
+  // lambda d'affichage, avant le push GC16).
+  void draw_sd_thumbnail(const char *path, int dx, int dy);
   float get_setup_priority() const override { return setup_priority::HARDWARE; }
 
   display::DisplayType get_display_type() override { return display::DisplayType::DISPLAY_TYPE_GRAYSCALE; }
@@ -77,6 +110,9 @@ class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
   void lcd_write_n_data_(uint16_t *buf, uint32_t word_count);
   void lcd_write_framebuffer_4bpp_(uint16_t *buf, uint16_t width_in_words, uint16_t height);
   void lcd_write_framebuffer_1bpp_(uint16_t width, uint16_t height);
+  void lcd_write_framebuffer_4bpp_area_(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
+  void wake_panel_();
+  void sleep_panel_();
   uint16_t lcd_read_data_();
   void lcd_read_n_data_(uint16_t *buf, uint32_t word_count);
   void lcd_wait_for_ready_();
@@ -89,6 +125,9 @@ class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
   bool framebuffer_is_binary_();
   void draw_driver_test_pattern_();
   uint8_t get_pixel_nibble_(uint16_t x, uint16_t y);
+  // Lecture/ecriture en coordonnees LOGIQUES (mirror X comme draw_absolute_pixel_internal).
+  uint8_t get_pixel_logical_(int x, int y);
+  void set_pixel_nibble_(int x, int y, uint8_t nibble);
 
   void lcd_send_cmd_arg_(uint16_t cmd, uint16_t *args, uint16_t num_args);
   uint16_t it8951_read_reg_(uint16_t addr);
@@ -119,6 +158,14 @@ class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
   bool it8951_sleeping_{false};
   int8_t temperature_{23};
   uint32_t spi_read_frequency_{1000000};
+  SdFat sd_;
+  bool sd_ok_{false};
+  uint32_t partials_since_full_{0};
+  static const uint32_t MAX_PARTIALS_BEFORE_FULL = 180;
+  // Miniatures: sous-echantillon entier de l'image plein ecran (1872x1404).
+  static const int THUMB_FACTOR = 4;
+  static const int THUMB_W = 1872 / THUMB_FACTOR;  // 468
+  static const int THUMB_H = 1404 / THUMB_FACTOR;  // 351
 };
 
 }  // namespace it8951_reterminal_e1003

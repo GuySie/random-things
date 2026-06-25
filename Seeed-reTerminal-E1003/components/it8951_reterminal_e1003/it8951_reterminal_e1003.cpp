@@ -349,6 +349,13 @@ void IT8951ReTerminalE1003Display::setup() {
   }
   memset(this->framebuffer_, 0xFF, buffer_size);
 
+  // Carte SD sur le bus SPI partage (CS=14). Alimentation SD = GPIO39 (SD_EN).
+  pinMode(IT8951_PIN_SD_EN, OUTPUT);
+  digitalWrite(IT8951_PIN_SD_EN, HIGH);
+  delay(10);
+  this->sd_ok_ = this->sd_.begin(SdSpiConfig(IT8951_PIN_SD_CS, SHARED_SPI, SD_SCK_MHZ(10), &SPI));
+  ESP_LOGCONFIG(TAG, "SD card: %s", this->sd_ok_ ? "OK" : "absente/echec init");
+
   ESP_LOGCONFIG(TAG, "IT8951 reTerminal E1003 initialization complete");
 }
 
@@ -433,12 +440,9 @@ void IT8951ReTerminalE1003Display::draw_driver_test_pattern_() {
   }
 }
 
-void IT8951ReTerminalE1003Display::update() {
-  if (this->framebuffer_ == nullptr) {
-    ESP_LOGW(TAG, "Skipping update because the framebuffer is not available");
-    return;
-  }
+void IT8951ReTerminalE1003Display::update() { this->full_refresh(); }
 
+void IT8951ReTerminalE1003Display::wake_panel_() {
   if (this->it8951_sleeping_) {
     ESP_LOGD(TAG, "Waking IT8951 from inter-refresh sleep");
     digitalWrite(IT8951_PIN_EN, HIGH);
@@ -446,6 +450,22 @@ void IT8951ReTerminalE1003Display::update() {
     this->lcd_sys_run_();
     this->it8951_sleeping_ = false;
   }
+}
+
+void IT8951ReTerminalE1003Display::sleep_panel_() {
+  this->lcd_write_cmd_code_(IT8951_TCON_SLEEP);
+  digitalWrite(IT8951_PIN_EN, LOW);
+  this->it8951_sleeping_ = true;
+  ESP_LOGD(TAG, "IT8951 sleeping, EPD_Drive power cut");
+}
+
+void IT8951ReTerminalE1003Display::full_refresh() {
+  if (this->framebuffer_ == nullptr) {
+    ESP_LOGW(TAG, "Skipping update because the framebuffer is not available");
+    return;
+  }
+
+  this->wake_panel_();
 
   this->do_update_();
   this->log_framebuffer_stats_();
@@ -454,7 +474,7 @@ void IT8951ReTerminalE1003Display::update() {
     this->log_framebuffer_stats_();
   }
 
-  ESP_LOGD(TAG, "Transferring image to IT8951...");
+  ESP_LOGD(TAG, "Transferring full image to IT8951...");
 
   const uint16_t w = this->get_width_internal();
   const uint16_t h = this->get_height_internal();
@@ -474,16 +494,13 @@ void IT8951ReTerminalE1003Display::update() {
     const uint16_t one_bpp_width_bytes = w / 8;
     ESP_LOGD(TAG, "Using sharp 1bpp upload path");
     this->it8951_load_img_area_start_(IT8951_LDIMG_L_ENDIAN, IT8951_8BPP, 0, 0, 0, one_bpp_width_bytes, h);
-    ESP_LOGD(TAG, "Uploading %u rows x %u packed bytes", h, one_bpp_width_bytes);
     this->lcd_write_framebuffer_1bpp_(w, h);
   } else {
     ESP_LOGD(TAG, "Using 4bpp grayscale upload path");
     this->it8951_load_img_area_start_(IT8951_LDIMG_L_ENDIAN, IT8951_4BPP, 0, 0, 0, w, h);
-    ESP_LOGD(TAG, "Uploading %u rows x %u words", h, width_in_words);
     this->lcd_write_framebuffer_4bpp_(reinterpret_cast<uint16_t *>(this->framebuffer_), width_in_words, h);
   }
 
-  ESP_LOGD(TAG, "Framebuffer upload complete");
   this->lcd_write_cmd_code_(IT8951_TCON_LD_IMG_END);
 
   // INIT pass (mode 0) fully discharges residual pixel state from the previous image,
@@ -501,12 +518,122 @@ void IT8951ReTerminalE1003Display::update() {
   }
   this->first_update_ = false;
 
-  this->lcd_write_cmd_code_(IT8951_TCON_SLEEP);
-  digitalWrite(IT8951_PIN_EN, LOW);
-  this->it8951_sleeping_ = true;
-  ESP_LOGD(TAG, "IT8951 sleeping, EPD_Drive power cut");
+  this->sleep_panel_();
+  this->partials_since_full_ = 0;
+}
 
-  ESP_LOGV(TAG, "Display update triggered");
+// Upload only a sub-rectangle of the framebuffer in 4bpp. x and w MUST be
+// multiples of 4 (4 pixels per 16-bit word). Byte order matches
+// lcd_write_framebuffer_4bpp_ (MSB-first per word).
+void IT8951ReTerminalE1003Display::lcd_write_framebuffer_4bpp_area_(uint16_t x, uint16_t y, uint16_t w,
+                                                                    uint16_t h) {
+  const uint16_t words = w / 4;
+  const uint32_t row_size_bytes = uint32_t(words) * 2;
+  uint8_t row_buffer[936];
+  if (row_size_bytes > sizeof(row_buffer)) {
+    ESP_LOGE(TAG, "Area row buffer too small for %u-byte transfer", static_cast<unsigned>(row_size_bytes));
+    return;
+  }
+  const uint32_t fb_row_bytes = uint32_t(this->get_width_internal()) / 2;
+  const uint32_t x_byte = uint32_t(x) / 2;
+
+  digitalWrite(IT8951_PIN_CS, LOW);
+  SPI.beginTransaction(SPISettings(this->spi_frequency_, MSBFIRST, SPI_MODE0));
+  this->lcd_wait_for_ready_();
+  this->spi_send_word_(0x0000);
+  this->lcd_wait_for_ready_();
+
+  for (uint16_t yy = 0; yy < h; yy++) {
+    const uint8_t *src = this->framebuffer_ + (uint32_t(y) + yy) * fb_row_bytes + x_byte;
+    for (uint16_t i = 0; i < words; i++) {
+      const uint8_t b0 = src[uint32_t(i) * 2];
+      const uint8_t b1 = src[uint32_t(i) * 2 + 1];
+      row_buffer[uint32_t(i) * 2] = b1;
+      row_buffer[uint32_t(i) * 2 + 1] = b0;
+    }
+    SPI.writeBytes(row_buffer, row_size_bytes);
+    if ((yy & 0x07) == 0) {
+      App.feed_wdt();
+    }
+  }
+
+  SPI.endTransaction();
+  digitalWrite(IT8951_PIN_CS, HIGH);
+}
+
+void IT8951ReTerminalE1003Display::render_framebuffer() {
+  if (this->framebuffer_ == nullptr) {
+    return;
+  }
+  // Runs the display lambda once. Heavy on PSRAM (~seconds); do this ONCE then
+  // call flush_zone() for each zone rather than re-rendering per zone.
+  this->do_update_();
+}
+
+void IT8951ReTerminalE1003Display::refresh_zone(int lx, int ly, int lw, int lh, int mode) {
+  this->render_framebuffer();
+  this->flush_zone(lx, ly, lw, lh, mode);
+}
+
+void IT8951ReTerminalE1003Display::flush_zone(int lx, int ly, int lw, int lh, int mode) {
+  if (this->framebuffer_ == nullptr || lw <= 0 || lh <= 0) {
+    return;
+  }
+  const int panel_w = this->get_width_internal();
+  const int panel_h = this->get_height_internal();
+
+  // The framebuffer is mirrored in X (see draw_absolute_pixel_internal):
+  // logical column lx maps to panel column panel_w - 1 - lx. Convert the
+  // logical rectangle to panel coordinates, then align x/w to 4 px (4bpp).
+  int px = panel_w - lx - lw;
+  int pend = px + lw;
+  if (px < 0) px = 0;
+  if (pend > panel_w) pend = panel_w;
+  px &= ~0x03;
+  pend = (pend + 3) & ~0x03;
+  const int pw = pend - px;
+
+  int y = ly;
+  int h = lh;
+  if (y < 0) {
+    h += y;
+    y = 0;
+  }
+  if (y + h > panel_h) {
+    h = panel_h - y;
+  }
+  if (pw <= 0 || h <= 0) {
+    return;
+  }
+
+  this->wake_panel_();
+  this->wait_for_display_ready_();
+
+  this->lcd_write_cmd_code_(USDEF_I80_CMD_TEMP);
+  this->lcd_write_data_(0x0001);  // Force Set from host
+  this->lcd_write_data_(static_cast<uint16_t>(this->temperature_));
+
+  this->it8951_write_reg_(UP1SR + 2, this->it8951_read_reg_(UP1SR + 2) & ~(1 << 2));
+  this->set_img_buf_base_addr_(this->img_buf_addr_);
+  this->it8951_load_img_area_start_(IT8951_LDIMG_L_ENDIAN, IT8951_4BPP, 0, static_cast<uint16_t>(px),
+                                    static_cast<uint16_t>(y), static_cast<uint16_t>(pw),
+                                    static_cast<uint16_t>(h));
+  this->lcd_write_framebuffer_4bpp_area_(static_cast<uint16_t>(px), static_cast<uint16_t>(y),
+                                         static_cast<uint16_t>(pw), static_cast<uint16_t>(h));
+  this->lcd_write_cmd_code_(IT8951_TCON_LD_IMG_END);
+  this->wait_for_display_ready_();
+
+  ESP_LOGD(TAG, "Zone refresh panel x=%d y=%d w=%d h=%d mode=%d", px, y, pw, h, mode);
+  this->it8951_display_area_(static_cast<uint16_t>(px), static_cast<uint16_t>(y), static_cast<uint16_t>(pw),
+                             static_cast<uint16_t>(h), static_cast<uint16_t>(mode));
+  this->wait_for_display_ready_();
+
+  this->sleep_panel_();
+
+  if (++this->partials_since_full_ >= MAX_PARTIALS_BEFORE_FULL) {
+    ESP_LOGD(TAG, "Partial threshold reached, forcing full refresh to purge ghosting");
+    this->full_refresh();
+  }
 }
 
 void IT8951ReTerminalE1003Display::dump_config() {
@@ -526,6 +653,16 @@ void IT8951ReTerminalE1003Display::dump_config() {
     ESP_LOGE(TAG, "  FAILURE REASON: %s", this->fail_reason_);
   }
   LOG_UPDATE_INTERVAL(this);
+}
+
+void IT8951ReTerminalE1003Display::fill(Color color) {
+  if (this->framebuffer_ == nullptr) {
+    return;
+  }
+  const uint8_t gray8 = static_cast<uint8_t>((77u * color.r + 150u * color.g + 29u * color.b) >> 8);
+  const uint8_t nib = gray8 >> 4;
+  const uint8_t byte = static_cast<uint8_t>((nib << 4) | nib);
+  memset(this->framebuffer_, byte, static_cast<size_t>(this->get_width_internal()) * this->get_height_internal() / 2);
 }
 
 void IT8951ReTerminalE1003Display::draw_absolute_pixel_internal(int x, int y, Color color) {
@@ -554,6 +691,28 @@ uint8_t IT8951ReTerminalE1003Display::get_pixel_nibble_(uint16_t x, uint16_t y) 
     return this->framebuffer_[pos] & 0x0F;
   }
   return this->framebuffer_[pos] >> 4;
+}
+
+// Lecture en coordonnees LOGIQUES: applique le meme mirror X que
+// draw_absolute_pixel_internal (qui stocke l'image inversee en X).
+uint8_t IT8951ReTerminalE1003Display::get_pixel_logical_(int x, int y) {
+  return this->get_pixel_nibble_(static_cast<uint16_t>(this->get_width() - 1 - x), static_cast<uint16_t>(y));
+}
+
+// Ecriture d'un nibble (0=noir .. 0x0F=blanc) en coordonnees LOGIQUES, meme
+// mapping que draw_absolute_pixel_internal mais sans conversion de couleur.
+void IT8951ReTerminalE1003Display::set_pixel_nibble_(int x, int y, uint8_t nibble) {
+  if (x < 0 || x >= this->get_width() || y < 0 || y >= this->get_height() || this->framebuffer_ == nullptr) {
+    return;
+  }
+  x = this->get_width() - 1 - x;
+  const uint32_t pos = (x + y * this->get_width()) / 2;
+  nibble &= 0x0F;
+  if ((x % 2) == 0) {
+    this->framebuffer_[pos] = (this->framebuffer_[pos] & 0xF0) | nibble;
+  } else {
+    this->framebuffer_[pos] = (this->framebuffer_[pos] & 0x0F) | (nibble << 4);
+  }
 }
 
 void IT8951ReTerminalE1003Display::lcd_send_cmd_arg_(uint16_t cmd, uint16_t *args, uint16_t num_args) {
@@ -615,6 +774,135 @@ void IT8951ReTerminalE1003Display::it8951_display_area_1bpp_(uint16_t x, uint16_
   this->it8951_write_reg_(BGVR, (uint16_t(bg_gray) << 8) | fg_gray);
   this->it8951_display_area_(x, y, w, h, mode);
   this->wait_for_display_ready_();
+}
+
+void IT8951ReTerminalE1003Display::show_sd_image(const char *path) {
+  if (this->framebuffer_ == nullptr) { ESP_LOGW(TAG, "show_sd_image: framebuffer absent"); return; }
+  if (!this->sd_ok_) { ESP_LOGW(TAG, "show_sd_image: SD non initialisee"); return; }
+  FsFile f = this->sd_.open(path, O_RDONLY);
+  if (!f) { ESP_LOGW(TAG, "show_sd_image: ouverture echouee %s", path); return; }
+  const size_t need = (size_t) this->get_width_internal() * this->get_height_internal() / 2;
+  size_t got = 0;
+  while (got < need) {
+    size_t chunk = (need - got > 4096) ? 4096 : (need - got);
+    int rd = f.read(this->framebuffer_ + got, chunk);
+    if (rd <= 0) break;
+    got += rd;
+    if ((got & 0x3FFF) == 0) App.feed_wdt();
+  }
+  f.close();
+  ESP_LOGI(TAG, "show_sd_image %s: %u/%u octets lus", path, (unsigned) got, (unsigned) need);
+  if (got < need) memset(this->framebuffer_ + got, 0xFF, need - got);
+
+  // Pousse le framebuffer en GC16 (photo = 16 gris, chemin 4bpp).
+  this->wake_panel_();
+  const uint16_t w = this->get_width_internal();
+  const uint16_t h = this->get_height_internal();
+  const uint16_t width_in_words = (w + 3) / 4;
+  this->wait_for_display_ready_();
+  this->lcd_write_cmd_code_(USDEF_I80_CMD_TEMP);
+  this->lcd_write_data_(0x0001);
+  this->lcd_write_data_(static_cast<uint16_t>(this->temperature_));
+  this->it8951_write_reg_(UP1SR + 2, this->it8951_read_reg_(UP1SR + 2) & ~(1 << 2));
+  this->set_img_buf_base_addr_(this->img_buf_addr_);
+  this->it8951_load_img_area_start_(IT8951_LDIMG_L_ENDIAN, IT8951_4BPP, 0, 0, 0, w, h);
+  this->lcd_write_framebuffer_4bpp_(reinterpret_cast<uint16_t *>(this->framebuffer_), width_in_words, h);
+  this->lcd_write_cmd_code_(IT8951_TCON_LD_IMG_END);
+  this->it8951_display_area_(0, 0, w, h, 0);  // INIT (purge ghost)
+  this->wait_for_display_ready_();
+  this->it8951_display_area_(0, 0, w, h, 2);  // GC16 (16 gris)
+  this->wait_for_display_ready_();
+  this->sleep_panel_();
+  this->partials_since_full_ = 0;
+}
+
+bool IT8951ReTerminalE1003Display::sd_file_exists(const char *path) {
+  if (!this->sd_ok_) {
+    return false;
+  }
+  return this->sd_.exists(path);
+}
+
+void IT8951ReTerminalE1003Display::make_thumbnail(const char *src_path, const char *dst_path) {
+  if (this->framebuffer_ == nullptr) {
+    ESP_LOGW(TAG, "make_thumbnail: framebuffer absent");
+    return;
+  }
+  if (!this->sd_ok_) {
+    ESP_LOGW(TAG, "make_thumbnail: SD non initialisee");
+    return;
+  }
+  // 1) Charger la source plein ecran dans le framebuffer (meme boucle que show_sd_image).
+  FsFile f = this->sd_.open(src_path, O_RDONLY);
+  if (!f) {
+    ESP_LOGW(TAG, "make_thumbnail: ouverture source echouee %s", src_path);
+    return;
+  }
+  const size_t need = (size_t) this->get_width_internal() * this->get_height_internal() / 2;
+  size_t got = 0;
+  while (got < need) {
+    size_t chunk = (need - got > 4096) ? 4096 : (need - got);
+    int rd = f.read(this->framebuffer_ + got, chunk);
+    if (rd <= 0)
+      break;
+    got += rd;
+    if ((got & 0x3FFF) == 0)
+      App.feed_wdt();
+  }
+  f.close();
+  if (got < need) {
+    memset(this->framebuffer_ + got, 0xFF, need - got);
+  }
+
+  // 2) Sous-echantillonner (nearest) en lisant des pixels LOGIQUES, empaqueter
+  //    2 pixels/octet en row-major LOGIQUE -> meme convention que draw_sd_thumbnail.
+  FsFile o = this->sd_.open(dst_path, O_WRONLY | O_CREAT | O_TRUNC);
+  if (!o) {
+    ESP_LOGW(TAG, "make_thumbnail: creation dst echouee %s", dst_path);
+    return;
+  }
+  const int row_bytes = THUMB_W / 2;  // 234
+  uint8_t row[THUMB_W / 2];
+  for (int ty = 0; ty < THUMB_H; ty++) {
+    const int sy = ty * THUMB_FACTOR;
+    for (int i = 0; i < row_bytes; i++) {
+      const int tx = i * 2;
+      const uint8_t lo = this->get_pixel_logical_(tx * THUMB_FACTOR, sy);
+      const uint8_t hi = this->get_pixel_logical_((tx + 1) * THUMB_FACTOR, sy);
+      row[i] = (lo & 0x0F) | (hi << 4);
+    }
+    o.write(row, row_bytes);
+    if ((ty & 0x1F) == 0)
+      App.feed_wdt();
+  }
+  o.close();
+  ESP_LOGI(TAG, "make_thumbnail %s -> %s (%dx%d)", src_path, dst_path, THUMB_W, THUMB_H);
+}
+
+void IT8951ReTerminalE1003Display::draw_sd_thumbnail(const char *path, int dx, int dy) {
+  if (this->framebuffer_ == nullptr || !this->sd_ok_) {
+    return;
+  }
+  FsFile f = this->sd_.open(path, O_RDONLY);
+  if (!f) {
+    ESP_LOGW(TAG, "draw_sd_thumbnail: ouverture echouee %s", path);
+    return;
+  }
+  const int row_bytes = THUMB_W / 2;  // 234
+  uint8_t row[THUMB_W / 2];
+  for (int ty = 0; ty < THUMB_H; ty++) {
+    int rd = f.read(row, row_bytes);
+    if (rd < row_bytes)
+      break;
+    for (int i = 0; i < row_bytes; i++) {
+      const int tx = i * 2;
+      this->set_pixel_nibble_(dx + tx, dy + ty, row[i] & 0x0F);
+      this->set_pixel_nibble_(dx + tx + 1, dy + ty, row[i] >> 4);
+    }
+    if ((ty & 0x1F) == 0)
+      App.feed_wdt();
+  }
+  f.close();
 }
 
 }  // namespace it8951_reterminal_e1003
