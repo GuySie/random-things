@@ -1,0 +1,819 @@
+####################################################
+## Seeed reTerminal E1004 Art Display
+##
+## Configuration to use a Seeed reTerminal E1004 full-color e-ink display as a digital
+## art frame. The display wakes on a configurable schedule, loads a random image,
+## displays it, and returns to deep sleep. By default, recently shown images are tracked
+## so the same image won't repeat until roughly half the collection has cycled through.
+## This can be toggled off from Home Assistant for pure random selection.
+##
+## HOW TO USE
+##
+## PREPARATION
+## 01. Set substitutions. Replace api_key, ota_password, and ap_password with real
+##     values — don't leave the FILL_IN_* placeholders.
+## 02. Set substitution rotation to 0 for portrait mode (native), or 90 for landscape mode.
+## 03. Create a helper boolean in Home Assistant to control whether this frame goes into
+##     deep sleep. The default entity name is input_boolean.reterminal_deep_sleep — if
+##     you create a helper with that name you can skip changing substitution ha_deep_sleep.
+## 04. Optionally change substitution ha_www_url to the publicly accessible URL of your www
+##     folder, with trailing slash. The default should work for most people.
+##     For more information, check:
+##     https://www.home-assistant.io/integrations/http/#hosting-files
+## 05. Optionally set substitution max_images to the maximum number of images you want to use in
+##     the future without having to update this configuration again.
+## 06. Optionally adjust substitution deep_sleep_run — a safety timeout: the device
+##     normally returns to deep sleep shortly after the display refresh completes, but
+##     this caps the maximum awake time in case something goes wrong. A Spectra 6 color
+##     refresh takes ~30 s, so keep this generous.
+## 07. Upload your PNG images to a subfolder of your www folder (you will set the folder
+##     name in step 14). Number them sequentially: 1.png, 2.png, etc. No gaps — the
+##     configuration assumes a continuous set of sequentially ascending numbered files.
+##     Images must be:
+##     - In PNG format
+##     - 1200x1600 pixels for portrait (rotation: 0), or 1600x1200 for landscape
+##       (rotation: 90)
+##     - Dithered to the 6-color E Ink Spectra 6 palette: black (#000000),
+##       white (#FFFFFF), red (#FF0000), green (#00FF00), blue (#0000FF),
+##       yellow (#FFFF00). Any other colors are snapped to the nearest of these
+##       six on the device, which looks poor — dither on your computer first.
+##
+## INSTALLATION
+## 08. Set your deep sleep helper boolean to off, so you can configure the display
+##     after installation.
+## 09. Keep image_history.h and the components folder in the same folder as this yaml —
+##     both are required for compilation.
+## 10. Install this configuration onto your Seeed reTerminal E1004 display.
+## 11. Add the display to Home Assistant after it has been discovered.
+## 12. In the display's ESPHome settings, turn on "Allow the device to perform Home
+##     Assistant actions."
+## 13. In Home Assistant, set the "Total Images" number of this ESPHome device to the
+##     highest numbered image you have uploaded. Update this if you add more images.
+## 14. In the display's ESPHome settings, configure the following (no reflashing needed):
+##     - "Refresh Interval" — how often (in whole hours) to wake, aligned to clock
+##       boundaries (e.g. 1 = every hour at :00, 6 = at 00:00/06:00/12:00/18:00)
+##     - "Active Hours Start" / "Active Hours End" — window during which refreshes are
+##       allowed; wakeups outside this window are skipped to the next boundary inside.
+##       Set start to 0 and end to 23 to run continuously around the clock.
+##     - "Album Folder" — subfolder within your www folder where images are stored;
+##       no trailing slash needed, leave empty if images are in the www folder directly.
+##
+## USAGE
+## 15. Set your deep sleep helper boolean to on. Every time the display wakes, it will
+##     load and display a random image, then return to deep sleep.
+## 16. You can also control deep sleep directly from the display's ESPHome settings.
+## 17. Press the refresh button (front-left touch button, or the refresh button on the
+##     back) to wake the display out of deep sleep (and load a random image).
+## 18. While awake, press the left/right direction buttons (front touch or back
+##     physical) to step backward/forward through your images sequentially.
+## 19. While awake, use the buttons in the display's ESPHome settings to go to the
+##     next, previous, or a random image.
+## 20. While awake, set the "Current Image" number of this device in Home Assistant
+##     to jump to that specific numbered image.
+## 21. Turn on the Audio Feedback toggle in the display's ESPHome settings to get
+##     buzzer sounds when performing actions.
+## 22. The Image History switch in the display's ESPHome settings controls random
+##     selection mode: on (default) avoids recently shown images; off picks freely.
+##
+## By Guy Sie (https://github.com/guysie)
+##
+####################################################
+
+substitutions:
+  name: reterminal-e1004
+  friendly_name: "Seeed reTerminal E1004"
+  project_name: "Guy Sie.reTerminal E1004 Art Display"
+  project_version: "0.1.0"
+  api_key: "FILL_IN_API_KEY"
+  ota_password: "FILL_IN_OTA_PASSWORD"
+  ap_password: "FILL_IN_AP_PASSWORD"
+  rotation: 0
+  ha_deep_sleep: "input_boolean.reterminal_deep_sleep"
+
+# Sane defaults that should work for most people
+  wifi_ssid: !secret wifi_ssid
+  wifi_password: !secret wifi_password
+  ha_www_url: "http://homeassistant.local:8123/local/"
+  max_images: 1000
+  deep_sleep_run: "180s"
+# Wait after starting a display refresh before entering deep sleep. The epaper_spi
+# driver refreshes asynchronously (a Spectra 6 refresh takes ~30 s); sleeping too
+# early cuts panel power mid-refresh.
+  display_refresh_wait: "60s"
+
+####################################################
+
+esphome:
+  min_version: 2026.7.0
+  name: ${name}
+  friendly_name: ${friendly_name}
+  project:
+    name: ${project_name}
+    version: ${project_version}
+  includes:
+    - image_history.h
+  on_boot:
+# Enable battery voltage measurement and record boot time from RTC
+    - priority: 600
+      then:
+        - output.turn_on: bsp_battery_enable
+        - component.update: last_boot_sensor
+  on_shutdown:
+# Disable battery voltage divider before deep sleep
+    - priority: 200
+      then:
+        - output.turn_off: bsp_battery_enable
+# Compute clock-aligned sleep duration from RTC just before entering deep sleep
+    - priority: 100
+      then:
+        - lambda: |-
+            int interval_h   = (int)id(rtc_interval_hours).state;
+            int active_start = (int)id(rtc_hour_start).state;
+            int active_end   = (int)id(rtc_hour_end).state;
+
+            auto t = id(rtc_time).now();
+            if (!t.is_valid()) {
+              id(deep_sleep_1).set_sleep_duration((uint32_t)interval_h * 3600000UL);
+              ESP_LOGW("rtc_sleep", "RTC not set, sleeping %d h", interval_h);
+              return;
+            }
+
+            int now_secs      = t.hour * 3600 + t.minute * 60 + t.second;
+            int interval_secs = interval_h * 3600;
+
+            // Next clock-aligned boundary (always at least 1 full interval from now)
+            int next_secs = ((now_secs / interval_secs) + 1) * interval_secs;
+
+            // Advance past quiet hours (cap at 48 iterations)
+            for (int i = 0; i < 48; i++) {
+              int h = (next_secs / 3600) % 24;
+              if (h >= active_start && h <= active_end) break;
+              next_secs += interval_secs;
+            }
+
+            uint32_t sleep_ms = (uint32_t)(next_secs - now_secs) * 1000UL;
+            id(deep_sleep_1).set_sleep_duration(sleep_ms);
+            ESP_LOGI("rtc_sleep", "Next wake in %u s at hour %d",
+                     (next_secs - now_secs), (next_secs / 3600) % 24);
+
+# Enable logging
+# GPIO19/20 are the ESP32-S3's native USB D-/D+ pins, but on this board they're
+# wired to I2C0 (RTC/SHT40/charger) instead; the CH340 console runs over UART0.
+# ESPHome's ESP32-S3 default (USB_SERIAL_JTAG) would otherwise bring up the
+# unused internal USB PHY on those same I2C pins for no reason.
+logger:
+  hardware_uart: UART0
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: ${api_key}
+
+ota:
+  - platform: esphome
+    password: ${ota_password}
+
+wifi:
+  ssid: ${wifi_ssid}
+  password: ${wifi_password}
+  fast_connect: true
+# Device waits for successful wifi connection (specifically, after initial boot and after waking from deep sleep) to update to a new random image
+# Side effect: will also trigger on wifi reconnection if device has poor reception
+  on_connect:
+    - script.execute: check_charger
+    - component.update: sht40_sensor
+    - component.update: battery_voltage
+    - button.press: random_image
+# Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Seeed-Reterminal"
+    password: ${ap_password}
+
+captive_portal:
+
+http_request:
+  buffer_size_rx: 32768
+
+## Deep sleep configuration
+# Comment out to disable deep sleep. This lets you use the refresh button as a control instead
+deep_sleep:
+  id: deep_sleep_1
+  run_duration: ${deep_sleep_run}
+# sleep_duration is computed dynamically from RTC just before deep sleep (see on_shutdown lambda above)
+# Refresh button (front touch or back physical) interrupts deep sleep. The button
+# lines are driven by always-powered AND gates that combine the touch and physical
+# buttons, so no internal pull-up is needed during sleep.
+  esp32_ext1_wakeup:
+    pins:
+      - number: GPIO5
+    mode: ANY_LOW
+
+
+## Hardware configuration (ESP, buttons, sensors, buzzer, LED)
+esp32:
+  board: esp32-s3-devkitc-1
+  cpu_frequency: 160MHZ
+  framework:
+    type: esp-idf
+
+psram:
+  mode: octal
+
+# Local copy of the upstream epaper_spi component (ESPHome 2026.7.0) with a fix for
+# a race in the T133A01 dual-CS transfer: if the 10 ms yield deadline lands on the
+# final row of a phase, the phase epilogue (SPI bus release, CS deassert) is skipped
+# and the next SPI command deadlocks, rebooting the device via the task watchdog.
+# Remove this override once the fix is merged upstream.
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [epaper_spi]
+
+spi:
+  - id: epaper_spi_bus
+    clk_pin: GPIO7
+    mosi_pin: GPIO9
+
+i2c:
+  id: i2c0
+  sda: GPIO19
+  scl: GPIO20
+
+time:
+  - platform: pcf8563
+    id: rtc_time
+    address: 0x51
+    i2c_id: i2c0
+    update_interval: never
+
+  - platform: homeassistant
+    id: ha_time
+    on_time_sync:
+      then:
+        - pcf8563.write_time:
+            id: rtc_time
+
+## USB charger detection (SY6974B PMIC, I2C0 address 0x6B, register 0x0A bit 7 = BUS_GD)
+script:
+  - id: check_charger
+    then:
+      - lambda: |-
+          uint8_t reg = 0x0A;
+          uint8_t data = 0;
+          bool connected = false;
+          if (id(i2c0).write(0x6B, &reg, 1, false) == i2c::ERROR_OK &&
+              id(i2c0).read(0x6B, &data, 1) == i2c::ERROR_OK) {
+            connected = (data & 0x80) != 0;
+          }
+          id(charger_connected).publish_state(connected);
+
+# Re-check while awake so unplugging is noticed without waiting for the next scheduled wake
+interval:
+  - interval: 15s
+    then:
+      - script.execute: check_charger
+
+binary_sensor:
+# Left direction button (back); front touch and back physical buttons share the same GPIO
+  - platform: gpio
+    pin:
+      number: GPIO4
+      inverted: true
+    id: button_1
+    name: "Button Left"
+    disabled_by_default: true
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 20ms
+              - light.turn_off: buzzer
+# If currently displayed image is the first one in the folder, don't go further back
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state == 1;'
+            then:
+              - logger.log: "Image counter already at minimum image count"
+            else:
+              - number.decrement:
+                  id: image_counter
+                  cycle: false
+
+# Right direction button (forward); front touch and back physical buttons share the same GPIO
+  - platform: gpio
+    pin:
+      number: GPIO3
+      inverted: true
+    id: button_2
+    name: "Button Right"
+    disabled_by_default: true
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 20ms
+              - light.turn_off: buzzer
+# If currently displayed image is the last one in the folder, don't go further forward
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state == id(total_images).state;'
+            then:
+              - logger.log: "Image counter already at total image count"
+            else:
+              - number.increment:
+                  id: image_counter
+                  cycle: false
+
+## Refresh button (random)
+# Uncomment to use the refresh button for a random image. You must disable deep sleep to do so.
+#  - platform: gpio
+#    pin:
+#      number: GPIO5
+#      inverted: true
+#    id: button_3
+#    name: "Button Refresh"
+#    disabled_by_default: true
+#    on_press:
+#      then:
+#        - number.set:
+#            id: image_counter
+#            value: !lambda |-
+#              uint32_t random_value = esp_random();
+#              return (random_value % (int)id(total_images).state) + 1;
+#        - if:
+#            condition:
+#              lambda: 'return (id(audiofeedback).state);'
+#            then:
+#              - light.turn_on:
+#                  id: buzzer
+#                  brightness: 25%
+#              - delay: 20ms
+#              - light.turn_off: buzzer
+
+## USB charger presence, read from the SY6974B battery PMIC over I2C0 (address 0x6B).
+## REG0A bit 7 (BUS_GD) is set whenever a cable is physically attached to VBUS, ahead of
+## any input-source qualification. State is refreshed by the check_charger script (see
+## `script:`), not by a lambda here, so the I2C bus isn't polled on every main loop tick.
+  - platform: template
+    name: "Charger Connected"
+    id: charger_connected
+    device_class: plug
+    icon: mdi:power-plug
+# Charger plugged in: hold off automatic (run_duration-triggered) deep sleep for as long as it stays connected.
+# Does not affect the explicit deep_sleep.enter calls in online_image's callbacks — those are gated separately.
+    on_press:
+      - deep_sleep.prevent: deep_sleep_1
+# Charger removed: resume normal sleep behavior, but only if HA hasn't separately disabled deep sleep.
+    on_release:
+      - if:
+          condition:
+            lambda: 'return id(allow_deepsleep).state;'
+          then:
+            - deep_sleep.allow: deep_sleep_1
+
+sensor:
+# SHT40 temperature/humidity sensor; read once per wake cycle via component.update: sht40_sensor in wifi.on_connect.
+# Unlike the E1003 (IT8951 waveform selection), the T133A01 driver needs no temperature
+# injection, so the readings are simply exposed to Home Assistant.
+  - platform: sht4x
+    id: sht40_sensor
+    temperature:
+      name: "Temperature"
+      id: sht40_temperature
+      entity_category: diagnostic
+    humidity:
+      name: "Humidity"
+      id: sht40_humidity
+      entity_category: diagnostic
+    update_interval: never
+
+# Battery voltage and Battery level sensor configuration
+  - platform: adc
+    pin: GPIO1
+    name: "Battery Voltage"
+    id: battery_voltage
+    internal: true
+    update_interval: 60s
+    attenuation: 12db
+    samples: 8
+    filters:
+# Compensate for voltage divider
+      - multiply: 2.0
+    on_value:
+      - component.update: battery_level
+  - platform: template
+    name: "Battery Level"
+    id: battery_level
+    entity_category: diagnostic
+    unit_of_measurement: "%"
+    icon: "mdi:battery"
+    device_class: battery
+    state_class: measurement
+    lambda: 'return id(battery_voltage).state;'
+    update_interval: never
+    filters:
+      - calibrate_linear:
+          - 4.15 -> 100.0
+          - 3.96 -> 90.0
+          - 3.91 -> 80.0
+          - 3.85 -> 70.0
+          - 3.80 -> 60.0
+          - 3.75 -> 50.0
+          - 3.68 -> 40.0
+          - 3.58 -> 30.0
+          - 3.49 -> 20.0
+          - 3.41 -> 10.0
+          - 3.30 -> 5.0
+          - 3.27 -> 0.0
+      - clamp:
+          min_value: 0
+          max_value: 100
+
+text_sensor:
+  - platform: template
+    name: "Last Boot"
+    id: last_boot_sensor
+    entity_category: diagnostic
+    disabled_by_default: true
+    device_class: timestamp
+    update_interval: never
+    lambda: |-
+      auto t = id(rtc_time).now();
+      if (!t.is_valid()) return {};
+      char buf[30];
+      time_t ts = t.timestamp;
+      struct tm *gmt = gmtime(&ts);
+      strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S+00:00", gmt);
+      return std::string(buf);
+
+output:
+# Green side LED GPIO configuration
+  - platform: gpio
+    pin: GPIO48
+    id: led_output
+    inverted: true
+# Battery voltage measurement GPIO configuration
+  - platform: gpio
+    pin: GPIO21
+    id: bsp_battery_enable
+# Buzzer configuration (to control the buzzer pwm, pretend it's an LED light)
+  - platform: ledc
+    pin: GPIO45
+    id: buzzer_pwm
+# The frequency determines the pitch of the buzzer's sound
+    frequency: 2700Hz
+
+light:
+# Expose green side LED to Home Assistant
+  - platform: binary
+    name: "Onboard LED"
+    output: led_output
+    id: onboard_led
+    icon: mdi:led-outline
+    disabled_by_default: true
+# Create a fake light entity to control the buzzer. The 'brightness' of the light controls the buzzer's volume
+  - platform: monochromatic
+    output: buzzer_pwm
+    name: "Buzzer"
+    id: buzzer
+    icon: mdi:volume-high
+    disabled_by_default: true
+    default_transition_length: 0s
+
+
+## E-ink display configuration (display)
+# All display pins (CS/CS1/DC/RST/BUSY/EN) default from the model definition
+display:
+  - platform: epaper_spi
+    id: epaper_display
+    spi_id: epaper_spi_bus
+    model: seeed-reterminal-e1004
+    update_interval: never
+    auto_clear_enabled: false
+    rotation: ${rotation}
+# A full-screen it.image() draw (1.92M pixels into PSRAM) blocks the loop task
+# longer than the 5 s esp-idf task watchdog and reboots the device mid-draw.
+# Draw row by row instead, feeding the watchdog every 64 rows.
+    lambda: |-
+      auto *img = id(onlineimage);
+      const int w = img->get_width();
+      const int h = img->get_height();
+      for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+          it.draw_pixel_at(x, y, img->get_pixel(x, y));
+        }
+        if ((y & 0x3F) == 0) {
+          App.feed_wdt();
+        }
+      }
+
+
+## Image variables configuration
+number:
+# Total number of images in the folder; must match highest number filename in the folder
+  - platform: template
+    name: "Total Images"
+    id: total_images
+    icon: mdi:camera-burst
+    entity_category: config
+    min_value: 1
+    max_value: ${max_images}
+    step: 1
+    restore_value: true
+    initial_value: 10
+    optimistic: true
+    mode: box
+# Current image being displayed
+  - platform: template
+    name: "Current Image"
+    id: image_counter
+    icon: mdi:image-frame
+    min_value: 1
+    max_value: ${max_images}
+    step: 1
+    restore_value: true
+    initial_value: 1
+    optimistic: true
+    mode: box
+    on_value:
+      then:
+# If current image is set to a file that can not exist, instead set to the highest-numbered file that can exist
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state > id(total_images).state;'
+            then:
+              - number.set:
+                  id: image_counter
+                  value: !lambda 'return id(total_images).state;'
+            else:
+# URL of image to display is always updated here, this causes online_image to start downloading
+              - online_image.set_url:
+                  id: onlineimage
+                  url: !lambda |-
+                    char urlstring[254];
+                    std::string folder = id(album_folder_text).state;
+                    if (!folder.empty() && folder.back() != '/') folder += '/';
+                    sprintf(urlstring, "${ha_www_url}%s%d.png", folder.c_str(), (int)id(image_counter).state);
+                    return (urlstring);
+
+
+# Deep sleep schedule configuration
+  - platform: template
+    name: "Refresh Interval"
+    id: rtc_interval_hours
+    icon: mdi:clock-outline
+    entity_category: config
+    unit_of_measurement: "h"
+    min_value: 1
+    max_value: 24
+    step: 1
+    restore_value: true
+    initial_value: 1
+    optimistic: true
+    mode: box
+  - platform: template
+    name: "Active Hours Start"
+    id: rtc_hour_start
+    icon: mdi:weather-sunset-up
+    entity_category: config
+    unit_of_measurement: "h"
+    min_value: 0
+    max_value: 23
+    step: 1
+    restore_value: true
+    initial_value: 7
+    optimistic: true
+    mode: box
+  - platform: template
+    name: "Active Hours End"
+    id: rtc_hour_end
+    icon: mdi:weather-sunset-down
+    entity_category: config
+    unit_of_measurement: "h"
+    min_value: 0
+    max_value: 23
+    step: 1
+    restore_value: true
+    initial_value: 23
+    optimistic: true
+    mode: box
+
+
+## Online image configuration
+image:
+  - platform: online_image
+    url: https://placehold.co/10x10/white/white/png
+    id: onlineimage
+    type: RGB565
+    format: png
+# The epaper_spi driver refreshes asynchronously, so deep sleep is entered after a
+# ${display_refresh_wait} delay rather than immediately after the update
+    on_download_finished:
+      - component.update: epaper_display
+      - lambda: |-
+          g_history[g_hist_head] = (int)id(image_counter).state;
+          g_hist_head = (g_hist_head + 1) % 50;
+          if (g_hist_count < 50) g_hist_count++;
+          ESP_LOGI("img_history", "Added image %d to history (count=%d)",
+                   (int)id(image_counter).state, (int)g_hist_count);
+      - delay: ${display_refresh_wait}
+      - if:
+          condition:
+            lambda: 'return id(allow_deepsleep).state && !id(charger_connected).state;'
+          then:
+            - deep_sleep.enter: deep_sleep_1
+    on_error:
+      - logger.log:
+          level: WARN
+          format: "Failed to download image %d"
+          args: ["(int)id(image_counter).state"]
+      - if:
+          condition:
+            lambda: 'return id(allow_deepsleep).state && !id(charger_connected).state;'
+          then:
+            - deep_sleep.enter: deep_sleep_1
+
+
+## Text configuration
+text:
+# Subfolder within Home Assistant's /local/ folder where images are stored; no trailing slash needed
+  - platform: template
+    name: "Album Folder"
+    id: album_folder_text
+    icon: mdi:folder-image
+    mode: text
+    restore_value: true
+    initial_value: ""
+    optimistic: true
+    max_length: 64
+    entity_category: config
+
+
+## Switch configuration
+switch:
+# Expose switch to let user turn on/off button feedback sounds
+  - platform: template
+    name: "Audio Feedback"
+    id: audiofeedback
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+# Toggle between history-aware random selection (avoids recent images) and pure random
+  - platform: template
+    name: "Image History"
+    id: use_image_history
+    icon: mdi:history
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+# Deep sleep behavior linked to input boolean in Home Assistant
+  - platform: homeassistant
+    id: allow_deepsleep
+    name: "HA Deep sleep"
+    entity_id: ${ha_deep_sleep}
+    on_turn_on:
+      - deep_sleep.allow: deep_sleep_1
+      - switch.turn_on: allow_deepsleep_toggle
+    on_turn_off:
+      - deep_sleep.prevent: deep_sleep_1
+      - switch.turn_off: allow_deepsleep_toggle
+# Expose switch to let user toggle the deep sleep input boolean from the device
+# For this to work, the option "Allow the device to perform Home Assistant actions" must have been enabled
+  - platform: template
+    name: "Deep Sleep Toggle"
+    id: allow_deepsleep_toggle
+    optimistic: true
+    entity_category: config
+    on_turn_on:
+      - homeassistant.action:
+          action: input_boolean.turn_on
+          data:
+            entity_id: ${ha_deep_sleep}
+    on_turn_off:
+      - homeassistant.action:
+          action: input_boolean.turn_off
+          data:
+            entity_id: ${ha_deep_sleep}
+# Restart
+  - platform: restart
+    name: "Device Restart"
+    entity_category: config
+
+button:
+  - platform: template
+    name: "Random Image"
+    id: random_image
+    icon: "mdi:slot-machine"
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 20ms
+              - light.turn_off: buzzer
+        - lambda: |-
+            int total = (int)id(total_images).state;
+            int candidate = -1;
+
+            if (total <= 1) {
+              candidate = 1;
+            } else if (!id(use_image_history).state) {
+              // Pure random: pick any image with no history restriction
+              candidate = (esp_random() % total) + 1;
+            } else {
+              // History-aware: avoid images in the recent window
+              // Window: floor(total/2), capped at 50, never >= total (always >= 1 free slot)
+              int hist_window = total / 2;
+              if (hist_window > 50) hist_window = 50;
+              if (hist_window >= total) hist_window = (total > 1) ? (total - 1) : 0;
+
+              // Try up to 200 random picks to find one not in the recent window
+              int check = ((int)g_hist_count < hist_window) ? (int)g_hist_count : hist_window;
+              for (int attempt = 0; attempt < 200 && candidate == -1; attempt++) {
+                int r = (esp_random() % total) + 1;
+                bool recent = false;
+                for (int i = 0; i < check; i++) {
+                  int idx = ((int)g_hist_head - 1 - i + 50) % 50;
+                  if (g_history[idx] == r) { recent = true; break; }
+                }
+                if (!recent) candidate = r;
+              }
+
+              // Fallback: pick the oldest entry in the window that is still a valid image number
+              if (candidate == -1 && g_hist_count > 0) {
+                int check2 = ((int)g_hist_count < hist_window) ? (int)g_hist_count : hist_window;
+                for (int i = check2 - 1; i >= 0 && candidate == -1; i--) {
+                  int idx = ((int)g_hist_head - 1 - i + 50) % 50;
+                  int img = g_history[idx];
+                  if (img >= 1 && img <= total) candidate = img;
+                }
+              }
+              if (candidate == -1) candidate = 1;
+            }
+
+            id(image_counter).make_call().set_value(candidate).perform();
+  - platform: template
+    name: "Previous Image"
+    id: previous_image
+    icon: "mdi:skip-previous"
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 20ms
+              - light.turn_off: buzzer
+# If currently displayed image is the first one in the folder, don't go further back
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state == 1;'
+            then:
+              - logger.log: "Image counter already at minimum image count"
+            else:
+              - number.decrement:
+                  id: image_counter
+                  cycle: false
+  - platform: template
+    name: "Next Image"
+    id: next_image
+    icon: "mdi:skip-next"
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 20ms
+              - light.turn_off: buzzer
+# If currently displayed image is the last one in the folder, don't go further forward
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state == id(total_images).state;'
+            then:
+              - logger.log: "Image counter already at total image count"
+            else:
+              - number.increment:
+                  id: image_counter
+                  cycle: false
