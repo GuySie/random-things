@@ -1,0 +1,275 @@
+blueprint:
+  name: OpenDisplay Big Weather Icons 3.5"
+  description: >
+    # OpenDisplay Big Weather Icons (3.5")
+
+    A blueprint that displays large current weather condition icons and current temperature on a 3.5" 384 x 184 e-paper tag. Made for easy visibility at the coat rack before going out. Created by Claude for [Guy Sie](https://github.com/guysie).
+
+    ## Prerequisites
+
+    - [OpenDisplay Integration](https://github.com/OpenDisplay/Home_Assistant_Integration) (v3.0.0-beta.8 or later) must be installed and configured
+
+    - Any weather integration (e.g., [Met.no](https://www.home-assistant.io/integrations/met)) must be set up
+
+    - Recommended optional integration:
+      - [Sun integration](https://www.home-assistant.io/integrations/sun) for accurate day/night weather icons
+
+    - For a nicer font add [`GothamRnd-Bold.ttf`](https://github.com/chunkysteveo/OpenEPaperLink-HA-Weatherman/raw/refs/heads/main/GothamRnd-Bold.ttf)
+
+  domain: automation
+  input:
+    displays:
+      name: E-Paper Display(s)
+      description: What 3.5" ESLs to display the content on
+      selector:
+        device:
+          multiple: true
+          filter:
+            integration: opendisplay
+    automation_trigger:
+      name: Trigger
+      description: When to trigger the automation
+      selector:
+        trigger:
+    optional:
+      name: Optional
+      icon: "mdi:cog"
+      collapsed: true
+      input:
+        automation_conditions:
+          name: Conditions
+          description: Optional conditions that must be met to run the automation
+          default: []
+          selector:
+            condition:
+        weather_entity:
+          name: Weather Entity
+          description: Optional - will auto-select first working weather entity if not specified and also try to fall back to another working one if it is currently not working.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: weather
+        current_temp_sensor:
+          name: Current Temperature Sensor
+          description: Optional temperature sensor to use instead of forecast temperature
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+                device_class: temperature
+        show_temp_unit:
+          name: Show Temperature unit
+          description: Show temperature unit (°C or °F)
+          default: true
+          selector:
+            boolean: {}
+        severe_temp_low:
+          name: Low temperature treshold
+          description: If this temperature or lower, indicate in accent color
+          default: 3
+          selector:
+            number:
+              unit_of_measurement: "°"
+              mode: box
+        weekday_format:
+          name: Language
+          description: Language for the interface
+          default: "en"
+          selector:
+            select:
+              options:
+                - label: "English"
+                  value: "en"
+                - label: "German"
+                  value: "de"
+                - label: "Dutch"
+                  value: "nl"
+                - label: "French"
+                  value: "fr"
+                - label: "Spanish"
+                  value: "es"
+                - label: "Polish"
+                  value: "pl"
+                - label: "Croatian"
+                  value: "hr"
+                - label: "Swedish"
+                  value: "sv"
+        font_file:
+          name: Font file
+          description: "Path to a custom font file (default: ppb.ttf) For a better font, use `GothamRnd-Bold.ttf`"
+          default: ppb.ttf
+          selector:
+            text: {}
+        rotate:
+          name: Rotation
+          description: "Display rotation in degrees. This panel is natively portrait; use 270 to display this landscape (384x184) layout upright."
+          default: "270"
+          selector:
+            select:
+              options:
+                - label: "0"
+                  value: "0"
+                - label: "90"
+                  value: "90"
+                - label: "180"
+                  value: "180"
+                - label: "270"
+                  value: "270"
+
+variables:
+  weather_entity: !input weather_entity
+  current_temp_sensor: !input current_temp_sensor
+  font_file: !input font_file
+  weekday_lang: !input weekday_format
+  forecast_entity: >-
+    {% if weather_entity and states(weather_entity) not in ['unknown', 'unavailable'] %}
+      {{ weather_entity }}
+    {% else %}
+      {{ (states | selectattr('domain','equalto','weather') | rejectattr('state','in',['unknown','unavailable']) | list | first).entity_id if states | selectattr('domain','equalto','weather') | rejectattr('state','in',['unknown','unavailable']) | list else 'unavailable' }}
+    {% endif %}
+  show_temp_unit: !input show_temp_unit
+  language_map: >
+    {% set map = {
+      "en": {
+        "no_weather": "No working weather entity found."
+      },
+      "de": {
+        "no_weather": "Keine funktionierende Wetter-Entität gefunden."
+      },
+      "fr": {
+        "no_weather": "Aucune entité météo fonctionnelle trouvée."
+      },
+      "nl": {
+        "no_weather": "Geen werkende weerentiteit gevonden."
+      },
+      "es": {
+        "no_weather": "No se encontró ninguna entidad meteorológica funcional."
+      },
+      "pl": {
+        "no_weather": "Nie znaleziono działającej encji pogodowej."
+      },
+      "hr": {
+        "no_weather": "Nije pronađen nijedan funkcionalan vremenski entitet."
+      },
+      "sv": {
+        "no_weather": "Ingen fungerande väderentitet hittades."
+      }
+    } %}
+    {{ map }}
+
+trigger: !input automation_trigger
+conditions: !input automation_conditions
+
+action:
+  - choose:
+      - conditions:
+          - "{{ forecast_entity != 'unavailable' }}"
+        sequence:
+          - variables:
+              severe_weather:
+                [
+                  "fog",
+                  "hail",
+                  "lightning",
+                  "lightning-rainy",
+                  "snowy",
+                  "snowy-rainy",
+                  "windy",
+                  "windy-variant",
+                  "exceptional",
+                ]
+              severe_temp_low: !input severe_temp_low
+
+              day_conditions_map:
+                clear-night: "mdi:weather-night"
+                cloudy: "mdi:weather-cloudy"
+                fog: "mdi:weather-fog"
+                hail: "mdi:weather-hail"
+                lightning: "mdi:weather-lightning"
+                lightning-rainy: "mdi:weather-lightning-rainy"
+                partlycloudy: "mdi:weather-partly-cloudy"
+                pouring: "mdi:weather-pouring"
+                rainy: "mdi:weather-rainy"
+                snowy: "mdi:weather-snowy"
+                snowy-rainy: "mdi:weather-snowy-rainy"
+                sunny: "mdi:weather-sunny"
+                windy: "mdi:weather-windy"
+                windy-variant: "mdi:weather-windy-variant"
+                exceptional: "mdi:alert-circle-outline"
+
+              night_conditions_map:
+                clear-night: "mdi:weather-night"
+                cloudy: "mdi:weather-cloudy"
+                fog: "mdi:weather-fog"
+                hail: "mdi:weather-hail"
+                lightning: "mdi:weather-lightning"
+                lightning-rainy: "mdi:weather-lightning-rainy"
+                partlycloudy: "mdi:weather-night-partly-cloudy"
+                pouring: "mdi:weather-pouring"
+                rainy: "mdi:weather-rainy"
+                snowy: "mdi:weather-snowy"
+                snowy-rainy: "mdi:weather-snowy-rainy"
+                sunny: "mdi:weather-night"
+                windy: "mdi:weather-windy"
+                windy-variant: "mdi:weather-windy-variant"
+                exceptional: "mdi:alert-circle-outline"
+
+          - action: opendisplay.drawcustom
+            target:
+              device_id: !input displays
+            data:
+              background: white
+              rotate: !input rotate
+              payload: >
+                [
+                  # Current Weather
+                  {
+                    "type": "icon",
+                    "value": "{% set condition = states(forecast_entity) %}{% set is_night = states('sun.sun') == 'below_horizon' %}{{ (night_conditions_map if is_night else day_conditions_map)[condition] | default('mdi:weather-' ~ condition) }}",
+                    "x": 218,
+                    "y": 22,
+                    "size": 140,
+                    "color": "{{ 'accent' if states(forecast_entity) in severe_weather else 'black' }}"
+                  },
+                  {
+                    "type": "line",
+                    "x_start": 192,
+                    "x_end": 192,
+                    "y_start": 26,
+                    "y_end": 158,
+                    "fill": "black"
+                  },
+                  {
+                    "type": "text",
+                    "value": "{% if current_temp_sensor and current_temp_sensor != '' %}{{ states(current_temp_sensor) | float | round }}{% else %}{{ state_attr(forecast_entity,'temperature') | round }}{% endif %}{% if show_temp_unit%}{{ state_attr(forecast_entity,'temperature_unit') }}{% else %}°{% endif %}",
+                    "font": "{{ font_file }}",
+                    "x": 96,
+                    "y": 92,
+                    "size": 84,
+                    "color": "{{ 'black' if state_attr(forecast_entity,'temperature') | round > severe_temp_low else 'accent' }}",
+                    "anchor": "mm"
+                  }
+                ]
+    default:
+      - action: opendisplay.drawcustom
+        target:
+          device_id: !input displays
+        data:
+          background: white
+          rotate: !input rotate
+          payload: >
+            [
+              {
+              "type": "text",
+              "value": "{{ language_map[weekday_lang]['no_weather']}}",
+              "font": "{{ font_file }}",
+              "x": "50%",
+              "y": "50%",
+              "size": 24,
+              "color": "red",
+              "anchor": "mm",
+              "max_width": 195
+              }
+            ]

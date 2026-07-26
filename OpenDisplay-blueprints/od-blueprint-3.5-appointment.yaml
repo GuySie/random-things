@@ -1,0 +1,417 @@
+blueprint:
+  name: OpenDisplay Next Appointment 3.5"
+  description: >
+    # OpenDisplay Next Appointment (3.5")
+
+    A blueprint that displays your next calendar appointment(s) on a 3.5" 384 x 184 pixel e-paper display. If a meeting is currently in progress it's shown (labeled "Now") together with the one after it; otherwise the next two upcoming appointments are shown. All-day events are ignored. Created by Claude, adapted from an automation by [Guy Sie](https://github.com/guysie).
+
+    ## Prerequisites
+
+    - [OpenDisplay Integration](https://github.com/OpenDisplay/Home_Assistant_Integration) (v3.0.0-beta.8 or later) must be installed and configured
+
+    - One or more [calendar integrations](https://www.home-assistant.io/integrations/#calendar) must be set up
+
+    - For a nicer font add [`GothamRnd-Bold.ttf`](https://github.com/chunkysteveo/OpenEPaperLink-HA-Weatherman/raw/refs/heads/main/GothamRnd-Bold.ttf)
+
+  domain: automation
+  input:
+    displays:
+      name: E-Paper Display(s)
+      description: What 3.5" ESLs to display the content on
+      selector:
+        device:
+          multiple: true
+          filter:
+            integration: opendisplay
+    automation_trigger:
+      name: Trigger
+      description: When to trigger the automation
+      selector:
+        trigger:
+    optional:
+      name: Optional
+      icon: "mdi:cog"
+      collapsed: true
+      input:
+        automation_conditions:
+          name: Conditions
+          description: Optional conditions that must be met to run the automation
+          default: []
+          selector:
+            condition:
+        calendar_entities:
+          name: Calendar(s)
+          description: One or more calendar entities to source events from. Events from multiple calendars are merged.
+          default: []
+          selector:
+            entity:
+              multiple: true
+              filter:
+                domain: calendar
+        days_ahead:
+          name: Search Window
+          description: How many days ahead to search for upcoming appointments. Increase this if your calendar is sparse and the display isn't finding a second event.
+          default: 7
+          selector:
+            number:
+              min: 1
+              max: 14
+              mode: box
+        time_format:
+          name: Time Format
+          description: Choose between 12-hour (AM/PM) or 24-hour format for event times
+          default: "24h"
+          selector:
+            select:
+              options:
+                - label: "12-hour (AM/PM)"
+                  value: "12h"
+                - label: "24-hour"
+                  value: "24h"
+        weekday_format:
+          name: Language
+          description: Language for "Today"/"Tomorrow"/weekday names and interface text
+          default: "en"
+          selector:
+            select:
+              options:
+                - label: "English"
+                  value: "en"
+                - label: "German"
+                  value: "de"
+                - label: "Dutch"
+                  value: "nl"
+                - label: "French"
+                  value: "fr"
+                - label: "Spanish"
+                  value: "es"
+                - label: "Polish"
+                  value: "pl"
+                - label: "Croatian"
+                  value: "hr"
+                - label: "Swedish"
+                  value: "sv"
+        header_title:
+          name: Header title
+          description: Text shown at the top-left of the display
+          default: "Next Appointment"
+          selector:
+            text: {}
+        font_file:
+          name: Font file
+          description: "Path to a custom font file (default: ppb.ttf) For a better font, use `GothamRnd-Bold.ttf`"
+          default: ppb.ttf
+          selector:
+            text: {}
+        rotate:
+          name: Rotation
+          description: "Display rotation in degrees. This panel is natively portrait; use 270 to display this landscape (384x184) layout upright."
+          default: "270"
+          selector:
+            select:
+              options:
+                - label: "0"
+                  value: "0"
+                - label: "90"
+                  value: "90"
+                - label: "180"
+                  value: "180"
+                - label: "270"
+                  value: "270"
+
+variables:
+  calendar_entities: !input calendar_entities
+  days_ahead: !input days_ahead
+  time_format: !input time_format
+  weekday_lang: !input weekday_format
+  header_title: !input header_title
+  font_file: !input font_file
+  language_map: >
+    {% set map = {
+      "en": {
+        "weekdays": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"],
+        "months": ["January","February","March","April","May","June","July","August","September","October","November","December"],
+        "today": "Today",
+        "tomorrow": "Tomorrow",
+        "now_label": "Now",
+        "no_events": "No upcoming appointments",
+        "no_calendar": "No calendar entity selected."
+      },
+      "de": {
+        "weekdays": ["Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag"],
+        "months": ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"],
+        "today": "Heute",
+        "tomorrow": "Morgen",
+        "now_label": "Jetzt",
+        "no_events": "Keine anstehenden Termine",
+        "no_calendar": "Keine Kalender-Entität ausgewählt."
+      },
+      "nl": {
+        "weekdays": ["Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag","Zondag"],
+        "months": ["Januari","Februari","Maart","April","Mei","Juni","Juli","Augustus","September","Oktober","November","December"],
+        "today": "Vandaag",
+        "tomorrow": "Morgen",
+        "now_label": "Nu",
+        "no_events": "Geen aankomende afspraken",
+        "no_calendar": "Geen kalender-entiteit geselecteerd."
+      },
+      "fr": {
+        "weekdays": ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"],
+        "months": ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"],
+        "today": "Aujourd'hui",
+        "tomorrow": "Demain",
+        "now_label": "En cours",
+        "no_events": "Aucun rendez-vous à venir",
+        "no_calendar": "Aucune entité de calendrier sélectionnée."
+      },
+      "es": {
+        "weekdays": ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"],
+        "months": ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"],
+        "today": "Hoy",
+        "tomorrow": "Mañana",
+        "now_label": "Ahora",
+        "no_events": "No hay citas próximas",
+        "no_calendar": "No se ha seleccionado ninguna entidad de calendario."
+      },
+      "pl": {
+        "weekdays": ["Poniedziałek","Wtorek","Środa","Czwartek","Piątek","Sobota","Niedziela"],
+        "months": ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec","Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"],
+        "today": "Dziś",
+        "tomorrow": "Jutro",
+        "now_label": "Teraz",
+        "no_events": "Brak nadchodzących wydarzeń",
+        "no_calendar": "Nie wybrano encji kalendarza."
+      },
+      "hr": {
+        "weekdays": ["Ponedjeljak","Utorak","Srijeda","Četvrtak","Petak","Subota","Nedjelja"],
+        "months": ["Siječanj","Veljača","Ožujak","Travanj","Svibanj","Lipanj","Srpanj","Kolovoz","Rujan","Listopad","Studeni","Prosinac"],
+        "today": "Danas",
+        "tomorrow": "Sutra",
+        "now_label": "Sada",
+        "no_events": "Nema nadolazećih događaja",
+        "no_calendar": "Nije odabran entitet kalendara."
+      },
+      "sv": {
+        "weekdays": ["Måndag","Tisdag","Onsdag","Torsdag","Fredag","Lördag","Söndag"],
+        "months": ["Januari","Februari","Mars","April","Maj","Juni","Juli","Augusti","September","Oktober","November","December"],
+        "today": "Idag",
+        "tomorrow": "Imorgon",
+        "now_label": "Nu",
+        "no_events": "Inga kommande händelser",
+        "no_calendar": "Ingen kalenderentitet vald."
+      }
+    } %}
+    {{ map }}
+  updated_text: >-
+    {{ as_timestamp(now()) | timestamp_custom('%d-%m-%Y %-I:%M %p') if time_format == '12h' else as_timestamp(now()) | timestamp_custom('%d-%m-%Y %H:%M') }}
+
+trigger: !input automation_trigger
+conditions: !input automation_conditions
+
+action:
+  - choose:
+      - conditions:
+          - "{{ calendar_entities | count > 0 }}"
+        sequence:
+          - action: calendar.get_events
+            target:
+              entity_id: "{{ calendar_entities }}"
+            data:
+              start_date_time: "{{ today_at('00:00') }}"
+              end_date_time: "{{ today_at('00:00') + timedelta(days=days_ahead) }}"
+            response_variable: cal_events
+          - variables:
+              events_data: >
+                {% set now_ts = now().timestamp() %}
+                {% set today_date = now().date() %}
+                {% set all_events = (cal_events.values() | map(attribute='events') | list | sum(start=[])) | selectattr('start', 'search', ':') | list | sort(attribute='start') %}
+                {% set ns = namespace(list=[]) %}
+                {% for e in all_events %}
+                  {% if (ns.list | count) < 2 and as_timestamp(e.end) > now_ts %}
+                    {% set start_local = as_local(as_datetime(e.start)) %}
+                    {% set is_current = as_timestamp(e.start) <= now_ts %}
+                    {% set day_diff = (start_local.date() - today_date).days %}
+                    {% if is_current %}
+                      {% set label = language_map[weekday_lang]['now_label'] %}
+                    {% elif day_diff == 0 %}
+                      {% set label = language_map[weekday_lang]['today'] %}
+                    {% elif day_diff == 1 %}
+                      {% set label = language_map[weekday_lang]['tomorrow'] %}
+                    {% else %}
+                      {% set label = language_map[weekday_lang]['weekdays'][start_local.weekday()] ~ ' ' ~ start_local.day ~ ' ' ~ language_map[weekday_lang]['months'][start_local.month - 1] %}
+                    {% endif %}
+                    {% set start_label = (as_timestamp(e.start) | timestamp_custom('%-I:%M %p')) if time_format == '12h' else (as_timestamp(e.start) | timestamp_custom('%H:%M')) %}
+                    {% set end_label = (as_timestamp(e.end) | timestamp_custom('%-I:%M %p')) if time_format == '12h' else (as_timestamp(e.end) | timestamp_custom('%H:%M')) %}
+                    {% set ns.list = ns.list + [{
+                      'label': label,
+                      'is_current': is_current,
+                      'time_range': start_label ~ ' - ' ~ end_label,
+                      'summary': e.summary
+                    }] %}
+                  {% endif %}
+                {% endfor %}
+                {{ ns.list }}
+          - action: opendisplay.drawcustom
+            target:
+              device_id: !input displays
+            data:
+              background: white
+              rotate: !input rotate
+              payload: >
+                [
+                {
+                  "type": "rectangle",
+                  "x_start": 0,
+                  "x_end": 384,
+                  "y_start": 0,
+                  "y_end": 26,
+                  "width": 0,
+                  "fill": "black",
+                  "outline": "black"
+                },
+                {
+                  "type": "icon",
+                  "value": "mdi:calendar-clock",
+                  "x": 2,
+                  "y": 1,
+                  "size": 24,
+                  "color": "white"
+                },
+                {
+                  "type": "text",
+                  "value": {{ header_title | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 28,
+                  "y": 13,
+                  "size": 18,
+                  "color": "white",
+                  "anchor": "lm"
+                },
+                {
+                  "type": "text",
+                  "value": "{{ updated_text }}",
+                  "font": "{{ font_file }}",
+                  "x": 380,
+                  "y": 13,
+                  "size": 12,
+                  "color": "white",
+                  "anchor": "rm"
+                }
+                {% if events_data | count == 0 %}
+                ,
+                {
+                  "type": "text",
+                  "value": {{ language_map[weekday_lang]['no_events'] | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": "50%",
+                  "y": "63%",
+                  "size": 22,
+                  "color": "red",
+                  "anchor": "mm",
+                  "max_width": 340
+                }
+                {% elif events_data | count == 1 %}
+                {% set event = events_data[0] %}
+                ,
+                {
+                  "type": "text",
+                  "value": {{ event.label | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 10,
+                  "y": 46,
+                  "size": 16,
+                  "color": "{{ 'accent' if event.is_current else 'black' }}",
+                  "anchor": "lm"
+                },
+                {
+                  "type": "text",
+                  "value": "{{ event.time_range }}",
+                  "font": "{{ font_file }}",
+                  "x": 10,
+                  "y": 96,
+                  "size": 52,
+                  "color": "black",
+                  "anchor": "lm"
+                },
+                {
+                  "type": "text",
+                  "value": {{ event.summary | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 10,
+                  "y": 148,
+                  "size": 26,
+                  "color": "black",
+                  "max_width": 364,
+                  "anchor": "lm"
+                }
+                {% else %}
+                {% for event in events_data %}
+                {% set row_y = 32 + loop.index0 * 73 %}
+                ,
+                {
+                  "type": "text",
+                  "value": {{ event.label | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 10,
+                  "y": {{ row_y + 14 }},
+                  "size": 14,
+                  "color": "{{ 'accent' if event.is_current else 'black' }}",
+                  "anchor": "lm"
+                },
+                {
+                  "type": "text",
+                  "value": "{{ event.time_range }}",
+                  "font": "{{ font_file }}",
+                  "x": 10,
+                  "y": {{ row_y + 38 }},
+                  "size": 26,
+                  "color": "black",
+                  "anchor": "lm"
+                },
+                {
+                  "type": "text",
+                  "value": {{ event.summary | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 10,
+                  "y": {{ row_y + 58 }},
+                  "size": 17,
+                  "color": "black",
+                  "max_width": 364,
+                  "anchor": "lm"
+                }
+                {% if loop.index0 == 0 %}
+                ,
+                {
+                  "type": "line",
+                  "x_start": 0,
+                  "x_end": 384,
+                  "y_start": {{ row_y + 73 }},
+                  "y_end": {{ row_y + 73 }},
+                  "fill": "black"
+                }
+                {% endif %}
+                {% endfor %}
+                {% endif %}
+                ]
+    default:
+      - action: opendisplay.drawcustom
+        target:
+          device_id: !input displays
+        data:
+          background: white
+          rotate: !input rotate
+          payload: >
+            [
+              {
+              "type": "text",
+              "value": {{ language_map[weekday_lang]['no_calendar'] | tojson }},
+              "font": "{{ font_file }}",
+              "x": "50%",
+              "y": "50%",
+              "size": 22,
+              "color": "red",
+              "anchor": "mm",
+              "max_width": 340
+              }
+            ]
+mode: single

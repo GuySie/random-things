@@ -1,0 +1,534 @@
+blueprint:
+  name: OpenDisplay Claude Usage 3.5"
+  description: >
+    # OpenDisplay Claude Usage Tracker (3.5")
+
+    A blueprint that displays Claude (Anthropic) API usage as a stack of labeled progress bars, each with a "resets at" caption, on a 3.5" 384 x 184 e-paper display. Supports up to 4 configurable bars, so it works with any usage sensor exposed by the integration below (session, weekly, weekly Sonnet, extra usage, or any dynamically-created per-model/per-surface bucket sensor). Each bar can optionally show a marker for how far through its period (e.g. a 5-hour session or 7-day week) we currently are, so you can compare usage pace against time elapsed at a glance. Created by Claude for [Guy Sie](https://github.com/guysie).
+
+    ## Prerequisites
+
+    - [OpenDisplay Integration](https://github.com/OpenDisplay/Home_Assistant_Integration) (v3.0.0-beta.8 or later) must be installed and configured
+
+    - [Claude Usage Integration](https://github.com/trickv/hass-claude-usage) (HACS) must be installed and configured with your Anthropic account
+
+    - For a nicer font add [`GothamRnd-Bold.ttf`](https://github.com/chunkysteveo/OpenEPaperLink-HA-Weatherman/raw/refs/heads/main/GothamRnd-Bold.ttf)
+
+  domain: automation
+  input:
+    displays:
+      name: E-Paper Display(s)
+      description: What 3.5" ESLs to display the content on
+      selector:
+        device:
+          multiple: true
+          filter:
+            integration: opendisplay
+    automation_trigger:
+      name: Trigger
+      description: When to trigger the automation
+      selector:
+        trigger:
+    optional:
+      name: Optional
+      icon: "mdi:cog"
+      collapsed: true
+      input:
+        automation_conditions:
+          name: Conditions
+          description: Optional conditions that must be met to run the automation
+          default: []
+          selector:
+            condition:
+        bar_1_entity:
+          name: "Bar 1 - Sensor"
+          description: Usage percentage sensor for the first bar (e.g. Session Usage)
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+                integration: hass_claude_usage
+        bar_1_label:
+          name: "Bar 1 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name
+          default: ""
+          selector:
+            text: {}
+        bar_1_reset_entity:
+          name: "Bar 1 - Reset time sensor"
+          description: Optional. Only needed if the usage sensor doesn't carry its own "resets_at" attribute (e.g. Session/Week/Week Sonnet Usage, which have a separate reset time sensor)
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+                integration: hass_claude_usage
+        bar_1_period_hours:
+          name: "Bar 1 - Period length (hours)"
+          description: "Optional. Set this to draw a marker on the bar showing how far through the period we currently are, to compare against the usage fill (e.g. 5 for a rolling session, 168 for a 7-day week). Leave at 0 to disable"
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 999
+              unit_of_measurement: h
+              mode: box
+        bar_2_entity:
+          name: "Bar 2 - Sensor"
+          description: Usage percentage sensor for the second bar. Leave blank to disable this bar
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+                integration: hass_claude_usage
+        bar_2_label:
+          name: "Bar 2 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name
+          default: ""
+          selector:
+            text: {}
+        bar_2_reset_entity:
+          name: "Bar 2 - Reset time sensor"
+          description: Optional. Only needed if the usage sensor doesn't carry its own "resets_at" attribute
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+                integration: hass_claude_usage
+        bar_2_period_hours:
+          name: "Bar 2 - Period length (hours)"
+          description: "Optional. Set this to draw a marker on the bar showing how far through the period we currently are, to compare against the usage fill (e.g. 5 for a rolling session, 168 for a 7-day week). Leave at 0 to disable"
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 999
+              unit_of_measurement: h
+              mode: box
+        bar_3_entity:
+          name: "Bar 3 - Sensor"
+          description: Usage percentage sensor for the third bar. Leave blank to disable this bar
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+                integration: hass_claude_usage
+        bar_3_label:
+          name: "Bar 3 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name
+          default: ""
+          selector:
+            text: {}
+        bar_3_reset_entity:
+          name: "Bar 3 - Reset time sensor"
+          description: Optional. Only needed if the usage sensor doesn't carry its own "resets_at" attribute
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+                integration: hass_claude_usage
+        bar_3_period_hours:
+          name: "Bar 3 - Period length (hours)"
+          description: "Optional. Set this to draw a marker on the bar showing how far through the period we currently are, to compare against the usage fill (e.g. 5 for a rolling session, 168 for a 7-day week). Leave at 0 to disable"
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 999
+              unit_of_measurement: h
+              mode: box
+        bar_4_entity:
+          name: "Bar 4 - Sensor"
+          description: Usage percentage sensor for the fourth bar. Leave blank to disable this bar
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+                integration: hass_claude_usage
+        bar_4_label:
+          name: "Bar 4 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name
+          default: ""
+          selector:
+            text: {}
+        bar_4_reset_entity:
+          name: "Bar 4 - Reset time sensor"
+          description: Optional. Only needed if the usage sensor doesn't carry its own "resets_at" attribute
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+                integration: hass_claude_usage
+        bar_4_period_hours:
+          name: "Bar 4 - Period length (hours)"
+          description: "Optional. Set this to draw a marker on the bar showing how far through the period we currently are, to compare against the usage fill (e.g. 5 for a rolling session, 168 for a 7-day week). Leave at 0 to disable"
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 999
+              unit_of_measurement: h
+              mode: box
+        warning_threshold:
+          name: Warning threshold
+          description: If a bar's usage is at or above this percentage, its fill and percentage text switch to the panel's accent color
+          default: 90
+          selector:
+            number:
+              min: 0
+              max: 100
+              unit_of_measurement: "%"
+              mode: box
+        header_title:
+          name: Header title
+          description: Text shown at the top-left of the display, in the header bar
+          default: "Claude Usage"
+          selector:
+            text: {}
+        use_24h_time:
+          name: Use 24-hour time
+          description: Show times as 24-hour (e.g. 19:00) instead of 12-hour am/pm (e.g. 7pm)
+          default: false
+          selector:
+            boolean: {}
+        weekday_format:
+          name: Language
+          description: Language for the interface
+          default: "en"
+          selector:
+            select:
+              options:
+                - label: "English"
+                  value: "en"
+                - label: "German"
+                  value: "de"
+                - label: "Dutch"
+                  value: "nl"
+                - label: "French"
+                  value: "fr"
+                - label: "Spanish"
+                  value: "es"
+                - label: "Polish"
+                  value: "pl"
+                - label: "Croatian"
+                  value: "hr"
+                - label: "Swedish"
+                  value: "sv"
+        font_file:
+          name: Font file
+          description: "Path to a custom font file (default: ppb.ttf) For a better font, use `GothamRnd-Bold.ttf`"
+          default: ppb.ttf
+          selector:
+            text: {}
+        rotate:
+          name: Rotation
+          description: "Display rotation in degrees. This panel is natively portrait; use 270 to display this landscape (384x184) layout upright."
+          default: "270"
+          selector:
+            select:
+              options:
+                - label: "0"
+                  value: "0"
+                - label: "90"
+                  value: "90"
+                - label: "180"
+                  value: "180"
+                - label: "270"
+                  value: "270"
+
+variables:
+  font_file: !input font_file
+  weekday_lang: !input weekday_format
+  warning_threshold: !input warning_threshold
+  header_title: !input header_title
+  use_24h_time: !input use_24h_time
+  bar_1_entity: !input bar_1_entity
+  bar_1_label: !input bar_1_label
+  bar_1_reset_entity: !input bar_1_reset_entity
+  bar_1_period_hours: !input bar_1_period_hours
+  bar_2_entity: !input bar_2_entity
+  bar_2_label: !input bar_2_label
+  bar_2_reset_entity: !input bar_2_reset_entity
+  bar_2_period_hours: !input bar_2_period_hours
+  bar_3_entity: !input bar_3_entity
+  bar_3_label: !input bar_3_label
+  bar_3_reset_entity: !input bar_3_reset_entity
+  bar_3_period_hours: !input bar_3_period_hours
+  bar_4_entity: !input bar_4_entity
+  bar_4_label: !input bar_4_label
+  bar_4_reset_entity: !input bar_4_reset_entity
+  bar_4_period_hours: !input bar_4_period_hours
+  language_map: >
+    {% set map = {
+      "en": {
+        "months": ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],
+        "resets_prefix": "Resets", "at_word": "at",
+        "no_bars": "No Claude usage sensors configured."
+      },
+      "de": {
+        "months": ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"],
+        "resets_prefix": "Reset", "at_word": "um",
+        "no_bars": "Keine Claude-Nutzungssensoren konfiguriert."
+      },
+      "nl": {
+        "months": ["Jan","Feb","Mrt","Apr","Mei","Jun","Jul","Aug","Sep","Okt","Nov","Dec"],
+        "resets_prefix": "Reset", "at_word": "om",
+        "no_bars": "Geen Claude-gebruikssensoren geconfigureerd."
+      },
+      "fr": {
+        "months": ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"],
+        "resets_prefix": "Réinit.", "at_word": "à",
+        "no_bars": "Aucun capteur d'utilisation Claude configuré."
+      },
+      "es": {
+        "months": ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"],
+        "resets_prefix": "Reinicia", "at_word": "a las",
+        "no_bars": "No hay sensores de uso de Claude configurados."
+      },
+      "pl": {
+        "months": ["Sty","Lut","Mar","Kwi","Maj","Cze","Lip","Sie","Wrz","Paź","Lis","Gru"],
+        "resets_prefix": "Reset", "at_word": "o",
+        "no_bars": "Nie skonfigurowano czujników użycia Claude."
+      },
+      "hr": {
+        "months": ["Sij","Velj","Ožu","Tra","Svi","Lip","Srp","Kol","Ruj","Lis","Stu","Pro"],
+        "resets_prefix": "Reset", "at_word": "u",
+        "no_bars": "Nije konfiguriran nijedan senzor korištenja Claudea."
+      },
+      "sv": {
+        "months": ["Jan","Feb","Mar","Apr","Maj","Jun","Jul","Aug","Sep","Okt","Nov","Dec"],
+        "resets_prefix": "Återställs", "at_word": "kl",
+        "no_bars": "Inga Claude-användningssensorer konfigurerade."
+      }
+    } %}
+    {{ map }}
+  bars: >
+    {% set ns = namespace(list=[]) %}
+    {% set lang = language_map[weekday_lang] %}
+    {% set slots = [
+      {'entity': bar_1_entity, 'label': bar_1_label, 'reset_entity': bar_1_reset_entity, 'period_hours': bar_1_period_hours},
+      {'entity': bar_2_entity, 'label': bar_2_label, 'reset_entity': bar_2_reset_entity, 'period_hours': bar_2_period_hours},
+      {'entity': bar_3_entity, 'label': bar_3_label, 'reset_entity': bar_3_reset_entity, 'period_hours': bar_3_period_hours},
+      {'entity': bar_4_entity, 'label': bar_4_label, 'reset_entity': bar_4_reset_entity, 'period_hours': bar_4_period_hours}
+    ] %}
+    {% for slot in slots %}
+      {% if slot.entity and slot.entity != '' %}
+        {% set raw_state = states(slot.entity) %}
+        {% set has_value = raw_state not in ['unknown', 'unavailable', 'none', ''] %}
+        {% set pct_raw = (raw_state | float(0)) if has_value else 0 %}
+        {% set pct_raw = ([pct_raw, 0] | max) %}
+        {% set pct_raw = ([pct_raw, 100] | min) %}
+        {% set pct = pct_raw | round | int %}
+        {% set fname = state_attr(slot.entity, 'friendly_name') or slot.entity %}
+        {% set label_text = slot.label if slot.label and slot.label != '' else (fname[:-6] if fname.endswith(' Usage') else fname) %}
+        {% set reset_raw = state_attr(slot.entity, 'resets_at') %}
+        {% if not reset_raw and slot.reset_entity and slot.reset_entity != '' %}
+          {% set reset_raw = states(slot.reset_entity) %}
+        {% endif %}
+        {% set marker_pct = none %}
+        {% if reset_raw and reset_raw not in ['unknown', 'unavailable', ''] %}
+          {% set reset_dt = as_datetime(reset_raw) | as_local %}
+          {% set minute = reset_dt.strftime('%M') %}
+          {% if use_24h_time %}
+            {% set time_str = reset_dt.strftime('%H') + ':' + minute %}
+          {% else %}
+            {% set hour12 = reset_dt.strftime('%I') | int %}
+            {% set ampm = reset_dt.strftime('%p') | lower %}
+            {% set time_str = hour12 | string + (':' + minute if minute != '00' else '') + ampm %}
+          {% endif %}
+          {% if reset_dt.date() == now().date() %}
+            {% set reset_caption = lang['resets_prefix'] + ' ' + time_str %}
+          {% else %}
+            {% set month_str = lang['months'][reset_dt.month - 1] %}
+            {% set reset_caption = lang['resets_prefix'] + ' ' + month_str + ' ' + (reset_dt.day | string) + ' ' + lang['at_word'] + ' ' + time_str %}
+          {% endif %}
+          {% if slot.period_hours and slot.period_hours > 0 %}
+            {% set seconds_remaining = ([(reset_dt - now()).total_seconds(), 0] | max) %}
+            {% set period_seconds = slot.period_hours * 3600 %}
+            {% set remaining_frac = ([seconds_remaining / period_seconds, 1] | min) %}
+            {% set marker_pct = ((1 - remaining_frac) * 100) | round | int %}
+          {% endif %}
+        {% else %}
+          {% set reset_caption = '' %}
+        {% endif %}
+        {% set ns.list = ns.list + [{
+          'label': label_text,
+          'percent': pct,
+          'percent_text': ((pct | string) + '%') if has_value else '--',
+          'is_warning': has_value and pct >= warning_threshold,
+          'reset_caption': reset_caption,
+          'marker_pct': marker_pct
+        }] %}
+      {% endif %}
+    {% endfor %}
+    {{ ns.list }}
+  updated_text: >-
+    {{ as_timestamp(now()) | timestamp_custom('%d-%m-%Y %H:%M') if use_24h_time else as_timestamp(now()) | timestamp_custom('%d-%m-%Y %-I:%M %p') }}
+
+trigger: !input automation_trigger
+conditions: !input automation_conditions
+
+action:
+  - choose:
+      - conditions:
+          - "{{ bars | length > 0 }}"
+        sequence:
+          - action: opendisplay.drawcustom
+            target:
+              device_id: !input displays
+            data:
+              background: white
+              rotate: !input rotate
+              payload: >
+                [
+                {% set margin_x = 14 %}
+                {% set right_x = 384 - margin_x %}
+                {% set canvas_h = 184 %}
+                {% set header_h = 26 %}
+                {% set top_margin = 8 %}
+                {% set bottom_margin = 8 %}
+                {% set avail_h = canvas_h - header_h - top_margin - bottom_margin %}
+                {% set n = bars | length %}
+                {% set row_h = ([avail_h / n, 48] | min) %}
+                {% set block_h = row_h * n %}
+                {% set top_off = ((avail_h - block_h) / 2) | round %}
+                {
+                  "type": "rectangle",
+                  "x_start": 0,
+                  "x_end": 384,
+                  "y_start": 0,
+                  "y_end": {{ header_h }},
+                  "fill": "black",
+                  "outline": "black",
+                  "width": 0
+                },
+                {
+                  "type": "icon",
+                  "value": "mdi:gauge",
+                  "x": 2,
+                  "y": 1,
+                  "size": 24,
+                  "color": "white"
+                },
+                {
+                  "type": "text",
+                  "value": {{ header_title | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 28,
+                  "y": 13,
+                  "size": 18,
+                  "color": "white",
+                  "anchor": "lm"
+                },
+                {
+                  "type": "text",
+                  "value": "{{ updated_text }}",
+                  "font": "{{ font_file }}",
+                  "x": 380,
+                  "y": 13,
+                  "size": 12,
+                  "color": "white",
+                  "anchor": "rm"
+                }
+                {% for bar in bars %}
+                  {% set row_y = header_h + top_margin + top_off + (loop.index0 * row_h) %}
+                  {% set label_size = ([9, (row_h * 0.29) | round] | max) | int %}
+                  {% set bar_h = ([8, (row_h * 0.29) | round] | max) | int %}
+                  {% set caption_size = ([8, (row_h * 0.23) | round] | max) | int %}
+                  {% set label_y = (row_y + (row_h * 0.04)) | round | int %}
+                  {% set bar_y_start = label_y + label_size + ((row_h * 0.06) | round | int) %}
+                  {% set bar_y_end = bar_y_start + bar_h %}
+                  {% set caption_y = bar_y_end + ((row_h * 0.06) | round | int) %}
+                  {% set fill_color = 'accent' if bar.is_warning else 'black' %}
+                  ,
+                  {
+                    "type": "text",
+                    "value": "{{ bar.label }}",
+                    "font": "{{ font_file }}",
+                    "x": {{ margin_x }},
+                    "y": {{ label_y }},
+                    "size": {{ label_size }},
+                    "color": "black",
+                    "anchor": "lt"
+                  },
+                  {
+                    "type": "text",
+                    "value": "{{ bar.percent_text }}",
+                    "font": "{{ font_file }}",
+                    "x": {{ right_x }},
+                    "y": {{ label_y }},
+                    "size": {{ label_size }},
+                    "color": "{{ fill_color }}",
+                    "anchor": "rt"
+                  },
+                  {
+                    "type": "progress_bar",
+                    "x_start": {{ margin_x }},
+                    "x_end": {{ right_x }},
+                    "y_start": {{ bar_y_start }},
+                    "y_end": {{ bar_y_end }},
+                    "progress": {{ bar.percent }},
+                    "fill": "{{ fill_color }}",
+                    "background": "half_black",
+                    "outline": "black",
+                    "width": 1
+                  }
+                  {% if bar.marker_pct is not none %}
+                    {% set marker_x = (margin_x + (right_x - margin_x) * (bar.marker_pct / 100)) | round | int %}
+                    {% set marker_under_fill = bar.marker_pct <= bar.percent %}
+                    {% set marker_color = 'white' if marker_under_fill else 'black' %}
+                    {% set marker_y_start = (bar_y_start + 1) if marker_under_fill else (bar_y_start - 1) %}
+                    {% set marker_y_end = (bar_y_end - 1) if marker_under_fill else (bar_y_end + 1) %}
+                  ,
+                  {
+                    "type": "line",
+                    "x_start": {{ marker_x }},
+                    "x_end": {{ marker_x }},
+                    "y_start": {{ marker_y_start }},
+                    "y_end": {{ marker_y_end }},
+                    "fill": "{{ marker_color }}",
+                    "width": 4
+                  }
+                  {% endif %}
+                  {% if bar.reset_caption %}
+                  ,
+                  {
+                    "type": "text",
+                    "value": "{{ bar.reset_caption }}",
+                    "font": "{{ font_file }}",
+                    "x": {{ margin_x }},
+                    "y": {{ caption_y }},
+                    "size": {{ caption_size }},
+                    "color": "black",
+                    "anchor": "lt"
+                  }
+                  {% endif %}
+                {% endfor %}
+                ]
+    default:
+      - action: opendisplay.drawcustom
+        target:
+          device_id: !input displays
+        data:
+          background: white
+          rotate: !input rotate
+          payload: >
+            [
+              {
+              "type": "text",
+              "value": "{{ language_map[weekday_lang]['no_bars'] }}",
+              "font": "{{ font_file }}",
+              "x": "50%",
+              "y": "50%",
+              "size": 22,
+              "color": "red",
+              "anchor": "mm",
+              "max_width": 340
+              }
+            ]

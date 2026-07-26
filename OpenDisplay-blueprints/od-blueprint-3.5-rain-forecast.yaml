@@ -1,0 +1,394 @@
+blueprint:
+  name: OpenDisplay Rain Forecast 3.5"
+  description: >
+    # OpenDisplay Rain Forecast (3.5")
+
+    A blueprint that displays a Buienradar-style rain intensity forecast as a bar graph (time on the X axis, rain intensity on the Y axis) for the next 2 hours in 5-minute steps (24 bars), on a 3.5" 384 x 184 e-paper display. Combines two independent forecast sources (Buienalarm and Buienradar) by taking the higher of the two for each timeframe, so a temporary outage or divergence in one source doesn't blank the graph. Bar height uses a log-scale so light rain stays visible while heavy/extreme rain saturates the bar rather than all reading identically tall. Created by Claude for [Guy Sie](https://github.com/guysie).
+
+    ## Prerequisites
+
+    - [OpenDisplay Integration](https://github.com/OpenDisplay/Home_Assistant_Integration) (v3.0.0-beta.8 or later) must be installed and configured
+
+    - [Neerslag App Integration](https://github.com/aex351/home-assistant-neerslag-app) (Buienalarm / Buienradar) must be installed and configured, with at least one of the two sources enabled. Buienradar only works in the Netherlands and Belgium, but Buienalarm seems to support other countries. The source sensors poll roughly every 3 minutes
+
+    - For a nicer font add [`GothamRnd-Bold.ttf`](https://github.com/chunkysteveo/OpenEPaperLink-HA-Weatherman/raw/refs/heads/main/GothamRnd-Bold.ttf)
+
+  domain: automation
+  input:
+    displays:
+      name: E-Paper Display(s)
+      description: What 3.5" ESLs to display the content on
+      selector:
+        device:
+          multiple: true
+          filter:
+            integration: opendisplay
+    automation_trigger:
+      name: Trigger
+      description: When to trigger the automation
+      selector:
+        trigger:
+    optional:
+      name: Optional
+      icon: "mdi:cog"
+      collapsed: true
+      input:
+        automation_conditions:
+          name: Conditions
+          description: Optional conditions that must be met to run the automation
+          default: []
+          selector:
+            condition:
+        buienalarm_entity:
+          name: Buienalarm sensor
+          description: The Neerslag App Buienalarm forecast sensor
+          default: sensor.neerslag_buienalarm_regen_data
+          selector:
+            entity:
+              filter:
+                domain: sensor
+                integration: neerslag
+        buienradar_entity:
+          name: Buienradar sensor
+          description: The Neerslag App Buienradar forecast sensor
+          default: sensor.neerslag_buienradar_regen_data
+          selector:
+            entity:
+              filter:
+                domain: sensor
+                integration: neerslag
+        severe_rain_threshold:
+          name: Severe rain threshold
+          description: If a timeframe's combined rain intensity is at or above this value, its bar switches to the panel's accent color
+          default: 10
+          selector:
+            number:
+              min: 0
+              max: 200
+              unit_of_measurement: "mm/h"
+              mode: box
+        graph_cap_mm_h:
+          name: Graph scale cap
+          description: Rain intensity at which a bar reaches full height (the graph saturates above this). 50mm/h is the standard "violent/extreme rain" threshold
+          default: 50
+          selector:
+            number:
+              min: 1
+              max: 200
+              unit_of_measurement: "mm/h"
+              mode: box
+        header_title:
+          name: Header title
+          description: Text shown at the top-left of the display
+          default: "Rain (next 2h)"
+          selector:
+            text: {}
+        use_24h_time:
+          name: Use 24-hour time
+          description: Show times as 24-hour (e.g. 19:00) instead of 12-hour am/pm (e.g. 7:00pm)
+          default: true
+          selector:
+            boolean: {}
+        weekday_format:
+          name: Language
+          description: Language for the interface
+          default: "en"
+          selector:
+            select:
+              options:
+                - label: "English"
+                  value: "en"
+                - label: "German"
+                  value: "de"
+                - label: "Dutch"
+                  value: "nl"
+                - label: "French"
+                  value: "fr"
+                - label: "Spanish"
+                  value: "es"
+                - label: "Polish"
+                  value: "pl"
+                - label: "Croatian"
+                  value: "hr"
+                - label: "Swedish"
+                  value: "sv"
+        font_file:
+          name: Font file
+          description: "Path to a custom font file (default: ppb.ttf) For a better font, use `GothamRnd-Bold.ttf`"
+          default: ppb.ttf
+          selector:
+            text: {}
+        rotate:
+          name: Rotation
+          description: "Display rotation in degrees. This panel is natively portrait; use 270 to display this landscape (384x184) layout upright."
+          default: "270"
+          selector:
+            select:
+              options:
+                - label: "0"
+                  value: "0"
+                - label: "90"
+                  value: "90"
+                - label: "180"
+                  value: "180"
+                - label: "270"
+                  value: "270"
+
+variables:
+  font_file: !input font_file
+  weekday_lang: !input weekday_format
+  use_24h_time: !input use_24h_time
+  header_title: !input header_title
+  buienalarm_entity: !input buienalarm_entity
+  buienradar_entity: !input buienradar_entity
+  severe_rain_threshold: !input severe_rain_threshold
+  graph_cap_mm_h: !input graph_cap_mm_h
+  language_map: >
+    {% set map = {
+      "en": { "no_data": "No rain forecast data available.", "rain_labels": ["L", "M", "H", "E"] },
+      "de": { "no_data": "Keine Regenvorhersagedaten verfügbar.", "rain_labels": ["L", "M", "S", "E"] },
+      "nl": { "no_data": "Geen regenvoorspellingsgegevens beschikbaar.", "rain_labels": ["L", "M", "Z", "E"] },
+      "fr": { "no_data": "Aucune donnée de prévision de pluie disponible.", "rain_labels": ["L", "M", "F", "E"] },
+      "es": { "no_data": "No hay datos de previsión de lluvia disponibles.", "rain_labels": ["L", "M", "F", "E"] },
+      "pl": { "no_data": "Brak dostępnych danych prognozy opadów.", "rain_labels": ["L", "U", "S", "E"] },
+      "hr": { "no_data": "Nema dostupnih podataka o prognozi kiše.", "rain_labels": ["S", "U", "J", "E"] },
+      "sv": { "no_data": "Ingen nederbördsprognosdata tillgänglig.", "rain_labels": ["L", "M", "K", "E"] }
+    } %}
+    {{ map }}
+  has_any_data: >
+    {% set raw1 = state_attr(buienalarm_entity, 'data') %}
+    {% set raw2 = state_attr(buienradar_entity, 'data') %}
+    {% set d1 = raw1 is mapping and raw1.get('success', False) and (raw1.get('precip', []) | length > 0) %}
+    {% set d2 = raw2 is string and (raw2 | trim | length > 0) %}
+    {{ d1 or d2 }}
+  updated_text: >
+    {% set n = now() %}
+    {% if use_24h_time %}
+      {{ n.strftime('%H:%M') }}
+    {% else %}
+      {{ (n.strftime('%I') | int | string) }}{{ n.strftime(':%M') }}{{ n.strftime('%p') | lower }}
+    {% endif %}
+  buckets: >
+    {% set ns = namespace(list=[]) %}
+    {% set cap = graph_cap_mm_h | float(50) %}
+    {% set threshold = severe_rain_threshold | float(10) %}
+    {% set now_ts = now().timestamp() %}
+    {% set now_5_ts = (now_ts // 300) * 300 %}
+
+    {% set raw1 = state_attr(buienalarm_entity, 'data') %}
+    {% set has_data1 = raw1 is mapping and raw1.get('success', False) and (raw1.get('precip', []) | length > 0) %}
+    {% if has_data1 %}
+      {% set start1 = raw1.start | float %}
+      {% set start1 = (start1 / 1000) if start1 > 10000000000 else start1 %}
+      {% set delta1 = raw1.delta | int(300) %}
+      {% set delta1 = 300 if delta1 <= 0 else delta1 %}
+      {% set precip1 = raw1.precip %}
+    {% endif %}
+
+    {% set raw2 = state_attr(buienradar_entity, 'data') %}
+    {% set has_data2 = raw2 is string and (raw2 | trim | length > 0) %}
+    {% if has_data2 %}
+      {% set ns2 = namespace(list=[]) %}
+      {% for token in raw2.split(' ') %}
+        {% if '|' in token and ':' in token %}
+          {% set parts = token.split('|') %}
+          {% set code2 = parts[0] | int(0) %}
+          {% set hh = parts[1].split(':')[0] | int(0) %}
+          {% set mm = parts[1].split(':')[1] | int(0) %}
+          {% set cand = now().replace(hour=hh, minute=mm, second=0, microsecond=0) %}
+          {% set cand = (cand + timedelta(days=1)) if cand.timestamp() < (now_ts - 3600) else cand %}
+          {% set ns2.list = ns2.list + [{'ts': cand.timestamp(), 'code': code2}] %}
+        {% endif %}
+      {% endfor %}
+      {% set parsed2 = ns2.list %}
+    {% endif %}
+
+    {% for i in range(24) %}
+      {% set bucket_ts = now_5_ts + (i * 300) %}
+      {% set mm1 = namespace(v=0) %}
+      {% if has_data1 %}
+        {% set idx = ((bucket_ts - start1) / delta1) | round(0, 'common') | int %}
+        {% if idx >= 0 and idx < (precip1 | length) and (((start1 + idx * delta1) - bucket_ts) | abs) <= (delta1 / 2) %}
+          {% set code1 = precip1[idx] | int(0) %}
+          {% set mm1.v = 0 if code1 <= 0 else 10 ** ((code1 - 109) / 32) %}
+        {% endif %}
+      {% endif %}
+      {% set mm2 = namespace(v=0) %}
+      {% if has_data2 %}
+        {% for entry in parsed2 %}
+          {% if ((entry.ts - bucket_ts) | abs) <= 150 %}
+            {% set candmm = 0 if entry.code <= 0 else 10 ** ((entry.code - 109) / 32) %}
+            {% set mm2.v = candmm if candmm > mm2.v else mm2.v %}
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+      {% set mm_h = [mm1.v, mm2.v] | max %}
+      {% set scaled = 0 if mm_h <= 0 else [[(((mm_h + 1) | log(10)) / ((cap + 1) | log(10))), 0] | max, 1] | min %}
+      {% set bucket_dt = as_datetime(bucket_ts) | as_local %}
+      {% set label = bucket_dt.strftime('%H:%M') if use_24h_time else ((bucket_dt.strftime('%I') | int | string) + bucket_dt.strftime(':%M')) %}
+      {% set ns.list = ns.list + [{
+        'index': i,
+        'mm_h': mm_h,
+        'scaled': scaled,
+        'is_severe': mm_h >= threshold,
+        'label': label
+      }] %}
+    {% endfor %}
+    {{ ns.list }}
+
+trigger: !input automation_trigger
+conditions: !input automation_conditions
+
+action:
+  - choose:
+      - conditions:
+          - "{{ has_any_data }}"
+        sequence:
+          - action: opendisplay.drawcustom
+            target:
+              device_id: !input displays
+            data:
+              background: white
+              rotate: !input rotate
+              payload: >
+                [
+                {% set chart_x_start = 24 %}
+                {% set chart_x_end = 374 %}
+                {% set chart_width = chart_x_end - chart_x_start %}
+                {% set n_bars = 24 %}
+                {% set col_w = chart_width / n_bars %}
+                {% set bar_w = 11 %}
+                {% set baseline_y = 150 %}
+                {% set chart_height = 124 %}
+                {% set ns_out = namespace(first=true) %}
+                {% set rain_labels = language_map[weekday_lang]['rain_labels'] %}
+                {% set thresholds = [
+                  {'mm_h': 0.1},
+                  {'mm_h': 2.5},
+                  {'mm_h': 7.6},
+                  {'mm_h': graph_cap_mm_h}
+                ] %}
+                {% for t in thresholds %}
+                  {% set t_scaled = [[(((t.mm_h + 1) | log(10)) / ((graph_cap_mm_h + 1) | log(10))), 0] | max, 1] | min %}
+                  {% set t_y = (baseline_y - (t_scaled * chart_height)) | round | int %}
+                  {% if not ns_out.first %},{% endif %}
+                  {% set ns_out.first = false %}
+                  {
+                    "type": "line",
+                    "x_start": {{ chart_x_start }},
+                    "x_end": {{ chart_x_end }},
+                    "y_start": {{ t_y }},
+                    "y_end": {{ t_y }},
+                    "fill": "black",
+                    "width": 1,
+                    "dashed": True,
+                    "dash_length": 1,
+                    "space_length": 2
+                  },
+                  {
+                    "type": "text",
+                    "value": "{{ rain_labels[loop.index0] }}",
+                    "font": "{{ font_file }}",
+                    "x": 2,
+                    "y": {{ t_y }},
+                    "size": 9,
+                    "color": "black",
+                    "anchor": "lm"
+                  }
+                {% endfor %}
+                {% for bucket in buckets %}
+                  {% set x_start = (chart_x_start + (bucket.index * col_w)) | round | int %}
+                  {% set x_end = x_start + bar_w %}
+                  {% if bucket.mm_h > 0 %}
+                    {% set bar_h_px = (bucket.scaled * chart_height) | round | int %}
+                    {% set bar_h_px = 6 if bar_h_px < 6 else bar_h_px %}
+                    {% set y_start = baseline_y - bar_h_px %}
+                    {% set fill_color = 'accent' if bucket.is_severe else 'black' %}
+                    {% if not ns_out.first %},{% endif %}
+                    {% set ns_out.first = false %}
+                    {
+                      "type": "rectangle",
+                      "x_start": {{ x_start }},
+                      "x_end": {{ x_end }},
+                      "y_start": {{ y_start }},
+                      "y_end": {{ baseline_y }},
+                      "fill": "{{ fill_color }}",
+                      "outline": "{{ fill_color }}",
+                      "width": 1
+                    }
+                  {% endif %}
+                  {% if bucket.index % 4 == 0 %}
+                    {% set tick_x = (x_start + (bar_w / 2)) | round | int %}
+                    {% if not ns_out.first %},{% endif %}
+                    {% set ns_out.first = false %}
+                    {
+                      "type": "line",
+                      "x_start": {{ tick_x }},
+                      "x_end": {{ tick_x }},
+                      "y_start": {{ baseline_y }},
+                      "y_end": {{ baseline_y + 3 }},
+                      "fill": "black"
+                    },
+                    {
+                      "type": "text",
+                      "value": "{{ bucket.label }}",
+                      "font": "{{ font_file }}",
+                      "x": {{ tick_x }},
+                      "y": 155,
+                      "size": 10,
+                      "color": "black",
+                      "anchor": "mt"
+                    }
+                  {% endif %}
+                {% endfor %}
+                ,
+                {
+                  "type": "line",
+                  "x_start": {{ chart_x_start }},
+                  "x_end": {{ chart_x_end }},
+                  "y_start": {{ baseline_y }},
+                  "y_end": {{ baseline_y }},
+                  "fill": "black"
+                },
+                {
+                  "type": "text",
+                  "value": "{{ header_title }}",
+                  "font": "{{ font_file }}",
+                  "x": 10,
+                  "y": 12,
+                  "size": 14,
+                  "color": "black",
+                  "anchor": "lm"
+                },
+                {
+                  "type": "text",
+                  "value": "{{ updated_text }}",
+                  "font": "{{ font_file }}",
+                  "x": 374,
+                  "y": 12,
+                  "size": 11,
+                  "color": "black",
+                  "anchor": "rm"
+                }
+                ]
+    default:
+      - action: opendisplay.drawcustom
+        target:
+          device_id: !input displays
+        data:
+          background: white
+          rotate: !input rotate
+          payload: >
+            [
+              {
+              "type": "text",
+              "value": "{{ language_map[weekday_lang]['no_data'] }}",
+              "font": "{{ font_file }}",
+              "x": "50%",
+              "y": "50%",
+              "size": 20,
+              "color": "red",
+              "anchor": "mm",
+              "max_width": 340
+              }
+            ]
