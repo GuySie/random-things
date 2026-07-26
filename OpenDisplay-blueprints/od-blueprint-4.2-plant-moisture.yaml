@@ -557,8 +557,10 @@ action:
               rotate: !input rotate
               payload: >
                 [
+                {% set ns_out = namespace(first=true) %}
                 {% set col1 = plants[:11] %}
                 {% set col2 = plants[11:22] %}
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "rectangle",
                   "x_start": 0,
@@ -568,7 +570,8 @@ action:
                   "width": 0,
                   "fill": "black",
                   "outline": "black"
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "icon",
                   "value": "mdi:sprout",
@@ -576,7 +579,8 @@ action:
                   "y": 1,
                   "size": 24,
                   "color": "white"
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
                   "value": {{ header_title_display | tojson }},
@@ -586,7 +590,8 @@ action:
                   "size": 20,
                   "color": "white",
                   "anchor": "lm"
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
                   "value": "{{ updated_text }}",
@@ -596,7 +601,8 @@ action:
                   "size": 12,
                   "color": "white",
                   "anchor": "rm"
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "line",
                   "x_start": 200,
@@ -607,7 +613,7 @@ action:
                   "width": 1
                 }
                 {% for plant in col1 %}
-                ,
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
                   "value": {{ plant.label | tojson }},
@@ -617,7 +623,8 @@ action:
                   "size": 15,
                   "color": "black",
                   "anchor": "lm"
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
                   "value": "{{ plant.percent_text }}",
@@ -630,7 +637,7 @@ action:
                 }
                 {% endfor %}
                 {% for plant in col2 %}
-                ,
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
                   "value": {{ plant.label | tojson }},
@@ -640,7 +647,8 @@ action:
                   "size": 15,
                   "color": "black",
                   "anchor": "lm"
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
                   "value": "{{ plant.percent_text }}",

@@ -3,9 +3,9 @@ blueprint:
   description: >
     # OpenDisplay Claude Usage Tracker (3.5")
 
-    A blueprint that displays Claude (Anthropic) API usage as a stack of labeled progress bars, each with a "resets at" caption, on a 3.5" 384 x 184 e-paper display. Supports up to 4 configurable bars, so it works with any usage sensor exposed by the integration below (session, weekly, weekly Sonnet, extra usage, or any dynamically-created per-model/per-surface bucket sensor). Each bar can optionally show a marker for how far through its period (e.g. a 5-hour session or 7-day week) we currently are, so you can compare usage pace against time elapsed at a glance. Created by Claude for [Guy Sie](https://github.com/guysie).
+    A blueprint that displays Claude (Anthropic) API usage as a stack of labeled progress bars, each with a "resets at" caption, on a 3.5" 384 x 180 e-paper display. Supports up to 4 configurable bars, so it works with any usage sensor exposed by the integration below (session, weekly, weekly Sonnet, extra usage, or any dynamically-created per-model/per-surface bucket sensor). Each bar can optionally show a marker for how far through its period (e.g. a 5-hour session or 7-day week) we currently are, so you can compare usage pace against time elapsed at a glance. Created by Claude for [Guy Sie](https://github.com/guysie).
 
-    Developed against the Solum Newton Core (not Core+) 3.5" tag, a discontinued product line. But should work on any BWR tag with the same 384 x 184 resolution.
+    Developed against the Solum Newton Core (not Core+) 3.5" tag, a discontinued product line. But should work on any BWR tag with the same 384 x 180 resolution.
 
     ## Prerequisites
 
@@ -235,7 +235,7 @@ blueprint:
             text: {}
         rotate:
           name: Rotation
-          description: "Display rotation in degrees. This panel is natively portrait; use 270 to display this landscape (384x184) layout upright."
+          description: "Display rotation in degrees. This panel is natively portrait; use 270 to display this landscape (384x180) layout upright."
           default: "270"
           selector:
             select:
@@ -404,17 +404,27 @@ action:
               rotate: !input rotate
               payload: >
                 [
+                {% set ns_out = namespace(first=true) %}
                 {% set margin_x = 14 %}
                 {% set right_x = 384 - margin_x %}
-                {% set canvas_h = 184 %}
+                {% set canvas_h = 180 %}
                 {% set header_h = 26 %}
                 {% set top_margin = 8 %}
                 {% set bottom_margin = 8 %}
                 {% set avail_h = canvas_h - header_h - top_margin - bottom_margin %}
                 {% set n = bars | length %}
-                {% set row_h = ([avail_h / n, 48] | min) %}
-                {% set block_h = row_h * n %}
-                {% set top_off = ((avail_h - block_h) / 2) | round %}
+                {% set row_h_base = ([avail_h / n, 48] | min) %}
+                {% set label_size = ([9, (row_h_base * 0.29) | round] | max) | int %}
+                {% set bar_h = ([8, (row_h_base * 0.29) | round] | max) | int %}
+                {% set caption_size = ([8, (row_h_base * 0.23) | round] | max) | int %}
+                {% set top_gap = (row_h_base * 0.04) | round | int %}
+                {% set mid_gap = (row_h_base * 0.06) | round | int %}
+                {% set ns_h = namespace(total=0) %}
+                {% for bar in bars %}
+                  {% set ns_h.total = ns_h.total + top_gap + label_size + mid_gap + bar_h + ((mid_gap + caption_size) if bar.reset_caption else 0) %}
+                {% endfor %}
+                {% set top_off = ([(avail_h - ns_h.total) / 2, 0] | max) | round %}
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "rectangle",
                   "x_start": 0,
@@ -424,7 +434,8 @@ action:
                   "fill": "black",
                   "outline": "black",
                   "width": 0
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "icon",
                   "value": "mdi:gauge",
@@ -432,7 +443,8 @@ action:
                   "y": 1,
                   "size": 24,
                   "color": "white"
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
                   "value": {{ header_title_display | tojson }},
@@ -442,7 +454,8 @@ action:
                   "size": 18,
                   "color": "white",
                   "anchor": "lm"
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
                   "value": "{{ updated_text }}",
@@ -453,17 +466,16 @@ action:
                   "color": "white",
                   "anchor": "rm"
                 }
+                {% set ns_row = namespace(y=header_h + top_margin + top_off) %}
                 {% for bar in bars %}
-                  {% set row_y = header_h + top_margin + top_off + (loop.index0 * row_h) %}
-                  {% set label_size = ([9, (row_h * 0.29) | round] | max) | int %}
-                  {% set bar_h = ([8, (row_h * 0.29) | round] | max) | int %}
-                  {% set caption_size = ([8, (row_h * 0.23) | round] | max) | int %}
-                  {% set label_y = (row_y + (row_h * 0.04)) | round | int %}
-                  {% set bar_y_start = label_y + label_size + ((row_h * 0.06) | round | int) %}
+                  {% set row_y = ns_row.y %}
+                  {% set label_y = (row_y + top_gap) | round | int %}
+                  {% set bar_y_start = label_y + label_size + mid_gap %}
                   {% set bar_y_end = bar_y_start + bar_h %}
-                  {% set caption_y = bar_y_end + ((row_h * 0.06) | round | int) %}
+                  {% set caption_y = bar_y_end + mid_gap %}
                   {% set fill_color = 'accent' if bar.is_warning else 'black' %}
-                  ,
+                  {% set ns_row.y = ns_row.y + top_gap + label_size + mid_gap + bar_h + ((mid_gap + caption_size) if bar.reset_caption else 0) %}
+                  {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                   {
                     "type": "text",
                     "value": {{ bar.label | tojson }},
@@ -473,7 +485,8 @@ action:
                     "size": {{ label_size }},
                     "color": "black",
                     "anchor": "lt"
-                  },
+                  }
+                  {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                   {
                     "type": "text",
                     "value": "{{ bar.percent_text }}",
@@ -483,7 +496,8 @@ action:
                     "size": {{ label_size }},
                     "color": "{{ fill_color }}",
                     "anchor": "rt"
-                  },
+                  }
+                  {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                   {
                     "type": "progress_bar",
                     "x_start": {{ margin_x }},
@@ -502,7 +516,7 @@ action:
                     {% set marker_color = 'white' if marker_under_fill else 'black' %}
                     {% set marker_y_start = (bar_y_start + 1) if marker_under_fill else (bar_y_start - 1) %}
                     {% set marker_y_end = (bar_y_end - 1) if marker_under_fill else (bar_y_end + 1) %}
-                  ,
+                  {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                   {
                     "type": "line",
                     "x_start": {{ marker_x }},
@@ -514,7 +528,7 @@ action:
                   }
                   {% endif %}
                   {% if bar.reset_caption %}
-                  ,
+                  {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                   {
                     "type": "text",
                     "value": "{{ bar.reset_caption }}",

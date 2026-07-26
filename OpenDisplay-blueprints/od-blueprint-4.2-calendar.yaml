@@ -269,6 +269,8 @@ action:
               rotate: !input rotate
               payload: >
                 [
+                {% set ns_out = namespace(first=true) %}
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "rectangle",
                   "x_start": 0,
@@ -278,7 +280,8 @@ action:
                   "width": 0,
                   "fill": "black",
                   "outline": "black"
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "icon",
                   "value": "mdi:calendar",
@@ -286,7 +289,8 @@ action:
                   "y": 0,
                   "size": 50,
                   "color": "white"
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
                   "value": {{ header_title_display | tojson }},
@@ -296,7 +300,8 @@ action:
                   "size": 43,
                   "color": "white",
                   "anchor": "lm"
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
                   "value": "W{{ now().isocalendar()[1] }}",
@@ -308,7 +313,7 @@ action:
                   "anchor": "rm"
                 }
                 {% for day in days %}
-                ,
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "rectangle",
                   "fill": "accent",
@@ -317,7 +322,8 @@ action:
                   "x_end": 400,
                   "y_start": {{ day.sep_y_start }},
                   "y_end": {{ day.sep_y_end }}
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
                   "value": {{ (day.weekday ~ ' ' ~ day.day_num ~ ' ' ~ day.month) | tojson }},
@@ -326,7 +332,8 @@ action:
                   "y": {{ day.header_y }},
                   "size": 22,
                   "color": "white"
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "multiline",
                   "value": {{ day.event_lines | join('§') | tojson }},

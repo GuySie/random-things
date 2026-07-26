@@ -3,9 +3,9 @@ blueprint:
   description: >
     # OpenDisplay Rain Forecast (3.5")
 
-    A blueprint that displays a Buienradar-style rain intensity forecast as a bar graph (time on the X axis, rain intensity on the Y axis) for the next 2 hours in 5-minute steps (24 bars), on a 3.5" 384 x 184 e-paper display. Combines two independent forecast sources (Buienalarm and Buienradar) by taking the higher of the two for each timeframe, so a temporary outage or divergence in one source doesn't blank the graph. Bar height uses a log-scale so light rain stays visible while heavy/extreme rain saturates the bar rather than all reading identically tall. Created by Claude for [Guy Sie](https://github.com/guysie).
+    A blueprint that displays a Buienradar-style rain intensity forecast as a bar graph (time on the X axis, rain intensity on the Y axis) for the next 2 hours in 5-minute steps (24 bars), on a 3.5" 384 x 180 e-paper display. Combines two independent forecast sources (Buienalarm and Buienradar) by taking the higher of the two for each timeframe, so a temporary outage or divergence in one source doesn't blank the graph. Bar height uses a log-scale so light rain stays visible while heavy/extreme rain saturates the bar rather than all reading identically tall. Created by Claude for [Guy Sie](https://github.com/guysie).
 
-    Developed against the Solum Newton Core (not Core+) 3.5" tag, a discontinued product line. But should work on any BWR tag with the same 384 x 184 resolution.
+    Developed against the Solum Newton Core (not Core+) 3.5" tag, a discontinued product line. But should work on any BWR tag with the same 384 x 180 resolution.
 
     ## Prerequisites
 
@@ -127,7 +127,7 @@ blueprint:
             text: {}
         rotate:
           name: Rotation
-          description: "Display rotation in degrees. This panel is natively portrait; use 270 to display this landscape (384x184) layout upright."
+          description: "Display rotation in degrees. This panel is natively portrait; use 270 to display this landscape (384x180) layout upright."
           default: "270"
           selector:
             select:
@@ -170,13 +170,8 @@ variables:
     {% set d1 = raw1 is mapping and raw1.get('success', False) and (raw1.get('precip', []) | length > 0) %}
     {% set d2 = raw2 is string and (raw2 | trim | length > 0) %}
     {{ d1 or d2 }}
-  updated_text: >
-    {% set n = now() %}
-    {% if time_format == '24h' %}
-      {{ n.strftime('%H:%M') }}
-    {% else %}
-      {{ (n.strftime('%I') | int | string) }}{{ n.strftime(':%M') }}{{ n.strftime('%p') | lower }}
-    {% endif %}
+  updated_text: >-
+    {{ as_timestamp(now()) | timestamp_custom('%d-%m-%Y %H:%M') if time_format == '24h' else as_timestamp(now()) | timestamp_custom('%d-%m-%Y %-I:%M %p') }}
   buckets: >
     {% set ns = namespace(list=[]) %}
     {% set cap = graph_cap_mm_h | float(50) %}
@@ -261,16 +256,58 @@ action:
               rotate: !input rotate
               payload: >
                 [
-                {% set chart_x_start = 24 %}
-                {% set chart_x_end = 374 %}
+                {% set chart_x_start = 28 %}
+                {% set chart_x_end = 370 %}
                 {% set chart_width = chart_x_end - chart_x_start %}
                 {% set n_bars = 24 %}
                 {% set col_w = chart_width / n_bars %}
                 {% set bar_w = 11 %}
                 {% set baseline_y = 150 %}
-                {% set chart_height = 124 %}
+                {% set chart_height = 111 %}
                 {% set ns_out = namespace(first=true) %}
                 {% set rain_labels = language_map[weekday_lang]['rain_labels'] %}
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "rectangle",
+                  "x_start": 0,
+                  "x_end": 384,
+                  "y_start": 0,
+                  "y_end": 26,
+                  "fill": "black",
+                  "outline": "black",
+                  "width": 0
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "icon",
+                  "value": "mdi:weather-pouring",
+                  "x": 2,
+                  "y": 1,
+                  "size": 24,
+                  "color": "white"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ header_title_display | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 28,
+                  "y": 13,
+                  "size": 18,
+                  "color": "white",
+                  "anchor": "lm"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": "{{ updated_text }}",
+                  "font": "{{ font_file }}",
+                  "x": 380,
+                  "y": 13,
+                  "size": 12,
+                  "color": "white",
+                  "anchor": "rm"
+                }
                 {% set thresholds = [
                   {'mm_h': 0.1},
                   {'mm_h': 2.5},
@@ -298,11 +335,11 @@ action:
                     "type": "text",
                     "value": "{{ rain_labels[loop.index0] }}",
                     "font": "{{ font_file }}",
-                    "x": 2,
+                    "x": {{ chart_x_start - 4 }},
                     "y": {{ t_y }},
                     "size": 9,
                     "color": "black",
-                    "anchor": "lm"
+                    "anchor": "rm"
                   }
                 {% endfor %}
                 {% for bucket in buckets %}
@@ -343,8 +380,8 @@ action:
                       "value": "{{ bucket.label }}",
                       "font": "{{ font_file }}",
                       "x": {{ tick_x }},
-                      "y": 155,
-                      "size": 10,
+                      "y": 160,
+                      "size": 12,
                       "color": "black",
                       "anchor": "mt"
                     }
@@ -358,26 +395,6 @@ action:
                   "y_start": {{ baseline_y }},
                   "y_end": {{ baseline_y }},
                   "fill": "black"
-                },
-                {
-                  "type": "text",
-                  "value": {{ header_title_display | tojson }},
-                  "font": "{{ font_file }}",
-                  "x": 10,
-                  "y": 12,
-                  "size": 14,
-                  "color": "black",
-                  "anchor": "lm"
-                },
-                {
-                  "type": "text",
-                  "value": "{{ updated_text }}",
-                  "font": "{{ font_file }}",
-                  "x": 374,
-                  "y": 12,
-                  "size": 11,
-                  "color": "black",
-                  "anchor": "rm"
                 }
                 ]
     default:

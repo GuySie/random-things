@@ -3,9 +3,9 @@ blueprint:
   description: >
     # OpenDisplay Next Appointment (3.5")
 
-    A blueprint that displays your next calendar appointment(s) on a 3.5" 384 x 184 pixel e-paper display. If a meeting is currently in progress it's shown (labeled "Now") together with the one after it; otherwise the next two upcoming appointments are shown. All-day events are ignored. Created by Claude, adapted from an automation by [Guy Sie](https://github.com/guysie).
+    A blueprint that displays your next calendar appointment(s) on a 3.5" 384 x 180 pixel e-paper display. If a meeting is currently in progress it's shown (labeled "Now") together with the one after it; otherwise the next two upcoming appointments are shown. All-day events are ignored. Created by Claude, adapted from an automation by [Guy Sie](https://github.com/guysie).
 
-    Developed against the Solum Newton Core (not Core+) 3.5" tag, a discontinued product line. But should work on any BWR tag with the same 384 x 184 resolution.
+    Developed against the Solum Newton Core (not Core+) 3.5" tag, a discontinued product line. But should work on any BWR tag with the same 384 x 180 resolution.
 
     ## Prerequisites
 
@@ -107,7 +107,7 @@ blueprint:
             text: {}
         rotate:
           name: Rotation
-          description: "Display rotation in degrees. This panel is natively portrait; use 270 to display this landscape (384x184) layout upright."
+          description: "Display rotation in degrees. This panel is natively portrait; use 270 to display this landscape (384x180) layout upright."
           default: "270"
           selector:
             select:
@@ -271,6 +271,8 @@ action:
               rotate: !input rotate
               payload: >
                 [
+                {% set ns_out = namespace(first=true) %}
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "rectangle",
                   "x_start": 0,
@@ -280,7 +282,8 @@ action:
                   "width": 0,
                   "fill": "black",
                   "outline": "black"
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "icon",
                   "value": "mdi:calendar-clock",
@@ -288,7 +291,8 @@ action:
                   "y": 1,
                   "size": 24,
                   "color": "white"
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
                   "value": {{ header_title_display | tojson }},
@@ -298,7 +302,8 @@ action:
                   "size": 18,
                   "color": "white",
                   "anchor": "lm"
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
                   "value": "{{ updated_text }}",
@@ -310,7 +315,7 @@ action:
                   "anchor": "rm"
                 }
                 {% if events_data | count == 0 %}
-                ,
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
                   "value": {{ language_map[weekday_lang]['no_events'] | tojson }},
@@ -324,81 +329,85 @@ action:
                 }
                 {% elif events_data | count == 1 %}
                 {% set event = events_data[0] %}
-                ,
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
                   "value": {{ event.label | tojson }},
                   "font": "{{ font_file }}",
-                  "x": 10,
+                  "x": 14,
                   "y": 46,
                   "size": 16,
                   "color": "{{ 'accent' if event.is_current else 'black' }}",
                   "anchor": "lm"
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
                   "value": "{{ event.time_range }}",
                   "font": "{{ font_file }}",
-                  "x": 10,
+                  "x": 14,
                   "y": 96,
                   "size": 52,
                   "color": "black",
                   "anchor": "lm"
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
                   "value": {{ event.summary | tojson }},
                   "font": "{{ font_file }}",
-                  "x": 10,
+                  "x": 14,
                   "y": 148,
                   "size": 26,
                   "color": "black",
-                  "max_width": 364,
+                  "max_width": 356,
                   "anchor": "lm"
                 }
                 {% else %}
                 {% for event in events_data %}
-                {% set row_y = 32 + loop.index0 * 73 %}
-                ,
+                {% set row_y = 34 + loop.index0 * 71 %}
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
                   "value": {{ event.label | tojson }},
                   "font": "{{ font_file }}",
-                  "x": 10,
+                  "x": 14,
                   "y": {{ row_y + 14 }},
                   "size": 14,
                   "color": "{{ 'accent' if event.is_current else 'black' }}",
                   "anchor": "lm"
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
                   "value": "{{ event.time_range }}",
                   "font": "{{ font_file }}",
-                  "x": 10,
+                  "x": 14,
                   "y": {{ row_y + 38 }},
                   "size": 26,
                   "color": "black",
                   "anchor": "lm"
-                },
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
                   "value": {{ event.summary | tojson }},
                   "font": "{{ font_file }}",
-                  "x": 10,
+                  "x": 14,
                   "y": {{ row_y + 58 }},
                   "size": 17,
                   "color": "black",
-                  "max_width": 364,
+                  "max_width": 356,
                   "anchor": "lm"
                 }
                 {% if loop.index0 == 0 %}
-                ,
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "line",
                   "x_start": 0,
                   "x_end": 384,
-                  "y_start": {{ row_y + 73 }},
-                  "y_end": {{ row_y + 73 }},
+                  "y_start": {{ row_y + 71 }},
+                  "y_end": {{ row_y + 71 }},
                   "fill": "black"
                 }
                 {% endif %}
