@@ -316,8 +316,8 @@ action:
                 {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "rectangle",
-                  "fill": "accent",
-                  "outline": "accent",
+                  "fill": "yellow",
+                  "outline": "yellow",
                   "x_start": 0,
                   "x_end": 400,
                   "y_start": {{ day.sep_y_start }},

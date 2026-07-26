@@ -1,0 +1,466 @@
+blueprint:
+  name: OpenDisplay Entity Dashboard 3.5"
+  description: >
+    # OpenDisplay Entity Dashboard (3.5")
+
+    A blueprint that displays up to 12 arbitrary Home Assistant entities on a 3.5" 384 x 180 e-paper tag, laid out as two columns of 6 rows each. Unlike the [4.2" Plant Moisture blueprint](od-blueprint-4.2-plant-moisture.yaml) it was adapted from, rows aren't limited to soil moisture sensors — any entity works, and each row shows the entity's raw state together with its own unit of measurement (if it has one). Each row's entity and label are fully configurable, and entities are packed in order (no gaps) so leaving slots empty just shortens the list. Created by Claude for [Guy Sie](https://github.com/guysie).
+
+    Developed against the Solum Newton Core (not Core+) 3.5" tag, a discontinued product line. But should work on any BWR tag with the same 384 x 180 resolution.
+
+    ## Prerequisites
+
+    - [OpenDisplay Integration](https://github.com/OpenDisplay/Home_Assistant_Integration) (v3.0.0-beta.8 or later) must be installed and configured
+
+    - One or more entities to display (any domain - sensor, binary_sensor, switch, etc.)
+
+    - For a nicer font add [`GothamRnd-Bold.ttf`](https://github.com/chunkysteveo/OpenEPaperLink-HA-Weatherman/raw/refs/heads/main/GothamRnd-Bold.ttf)
+
+  domain: automation
+  input:
+    displays:
+      name: E-Paper Display(s)
+      description: What 3.5" ESLs to display the content on
+      selector:
+        device:
+          multiple: true
+          filter:
+            integration: opendisplay
+    automation_trigger:
+      name: Trigger
+      description: When to trigger the automation
+      selector:
+        trigger:
+    optional:
+      name: Optional
+      icon: "mdi:cog"
+      collapsed: true
+      input:
+        automation_conditions:
+          name: Conditions
+          description: Optional conditions that must be met to run the automation
+          default: []
+          selector:
+            condition:
+        entity_1:
+          name: "Entity 1"
+          description: Entity for row 1. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity: {}
+        entity_1_label:
+          name: "Entity 1 - Label"
+          description: Optional label override. Leave blank to derive it from the entity's name.
+          default: ""
+          selector:
+            text: {}
+        entity_2:
+          name: "Entity 2"
+          description: Entity for row 2. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity: {}
+        entity_2_label:
+          name: "Entity 2 - Label"
+          description: Optional label override. Leave blank to derive it from the entity's name.
+          default: ""
+          selector:
+            text: {}
+        entity_3:
+          name: "Entity 3"
+          description: Entity for row 3. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity: {}
+        entity_3_label:
+          name: "Entity 3 - Label"
+          description: Optional label override. Leave blank to derive it from the entity's name.
+          default: ""
+          selector:
+            text: {}
+        entity_4:
+          name: "Entity 4"
+          description: Entity for row 4. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity: {}
+        entity_4_label:
+          name: "Entity 4 - Label"
+          description: Optional label override. Leave blank to derive it from the entity's name.
+          default: ""
+          selector:
+            text: {}
+        entity_5:
+          name: "Entity 5"
+          description: Entity for row 5. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity: {}
+        entity_5_label:
+          name: "Entity 5 - Label"
+          description: Optional label override. Leave blank to derive it from the entity's name.
+          default: ""
+          selector:
+            text: {}
+        entity_6:
+          name: "Entity 6"
+          description: Entity for row 6. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity: {}
+        entity_6_label:
+          name: "Entity 6 - Label"
+          description: Optional label override. Leave blank to derive it from the entity's name.
+          default: ""
+          selector:
+            text: {}
+        entity_7:
+          name: "Entity 7"
+          description: Entity for row 7. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity: {}
+        entity_7_label:
+          name: "Entity 7 - Label"
+          description: Optional label override. Leave blank to derive it from the entity's name.
+          default: ""
+          selector:
+            text: {}
+        entity_8:
+          name: "Entity 8"
+          description: Entity for row 8. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity: {}
+        entity_8_label:
+          name: "Entity 8 - Label"
+          description: Optional label override. Leave blank to derive it from the entity's name.
+          default: ""
+          selector:
+            text: {}
+        entity_9:
+          name: "Entity 9"
+          description: Entity for row 9. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity: {}
+        entity_9_label:
+          name: "Entity 9 - Label"
+          description: Optional label override. Leave blank to derive it from the entity's name.
+          default: ""
+          selector:
+            text: {}
+        entity_10:
+          name: "Entity 10"
+          description: Entity for row 10. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity: {}
+        entity_10_label:
+          name: "Entity 10 - Label"
+          description: Optional label override. Leave blank to derive it from the entity's name.
+          default: ""
+          selector:
+            text: {}
+        entity_11:
+          name: "Entity 11"
+          description: Entity for row 11. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity: {}
+        entity_11_label:
+          name: "Entity 11 - Label"
+          description: Optional label override. Leave blank to derive it from the entity's name.
+          default: ""
+          selector:
+            text: {}
+        entity_12:
+          name: "Entity 12"
+          description: Entity for row 12. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity: {}
+        entity_12_label:
+          name: "Entity 12 - Label"
+          description: Optional label override. Leave blank to derive it from the entity's name.
+          default: ""
+          selector:
+            text: {}
+        header_title:
+          name: Header title
+          description: Text shown at the top-left of the display. Leave blank to use a translated default.
+          default: ""
+          selector:
+            text: {}
+        time_format:
+          name: Time Format
+          description: Choose between 12-hour (AM/PM) or 24-hour format for the "last updated" timestamp
+          default: "24h"
+          selector:
+            select:
+              options:
+                - label: "12-hour (AM/PM)"
+                  value: "12h"
+                - label: "24-hour"
+                  value: "24h"
+        weekday_format:
+          name: Language
+          description: Language for interface text
+          default: "en"
+          selector:
+            select:
+              options:
+                - label: "English"
+                  value: "en"
+                - label: "German"
+                  value: "de"
+                - label: "Dutch"
+                  value: "nl"
+                - label: "French"
+                  value: "fr"
+                - label: "Spanish"
+                  value: "es"
+                - label: "Polish"
+                  value: "pl"
+                - label: "Croatian"
+                  value: "hr"
+                - label: "Swedish"
+                  value: "sv"
+        font_file:
+          name: Font file
+          description: "Path to a custom font file (default: ppb.ttf) For a better font, use `GothamRnd-Bold.ttf`"
+          default: ppb.ttf
+          selector:
+            text: {}
+        rotate:
+          name: Rotation
+          description: "Display rotation in degrees. This panel is natively portrait; use 270 to display this landscape (384x180) layout upright."
+          default: "270"
+          selector:
+            select:
+              options:
+                - label: "0"
+                  value: "0"
+                - label: "90"
+                  value: "90"
+                - label: "180"
+                  value: "180"
+                - label: "270"
+                  value: "270"
+
+variables:
+  font_file: !input font_file
+  header_title: !input header_title
+  time_format: !input time_format
+  weekday_lang: !input weekday_format
+  entity_1: !input entity_1
+  entity_1_label: !input entity_1_label
+  entity_2: !input entity_2
+  entity_2_label: !input entity_2_label
+  entity_3: !input entity_3
+  entity_3_label: !input entity_3_label
+  entity_4: !input entity_4
+  entity_4_label: !input entity_4_label
+  entity_5: !input entity_5
+  entity_5_label: !input entity_5_label
+  entity_6: !input entity_6
+  entity_6_label: !input entity_6_label
+  entity_7: !input entity_7
+  entity_7_label: !input entity_7_label
+  entity_8: !input entity_8
+  entity_8_label: !input entity_8_label
+  entity_9: !input entity_9
+  entity_9_label: !input entity_9_label
+  entity_10: !input entity_10
+  entity_10_label: !input entity_10_label
+  entity_11: !input entity_11
+  entity_11_label: !input entity_11_label
+  entity_12: !input entity_12
+  entity_12_label: !input entity_12_label
+  entities: >
+    {% set ns = namespace(list=[]) %}
+    {% set slots = [
+      {'entity': entity_1, 'label': entity_1_label},
+      {'entity': entity_2, 'label': entity_2_label},
+      {'entity': entity_3, 'label': entity_3_label},
+      {'entity': entity_4, 'label': entity_4_label},
+      {'entity': entity_5, 'label': entity_5_label},
+      {'entity': entity_6, 'label': entity_6_label},
+      {'entity': entity_7, 'label': entity_7_label},
+      {'entity': entity_8, 'label': entity_8_label},
+      {'entity': entity_9, 'label': entity_9_label},
+      {'entity': entity_10, 'label': entity_10_label},
+      {'entity': entity_11, 'label': entity_11_label},
+      {'entity': entity_12, 'label': entity_12_label}
+    ] %}
+    {% for slot in slots %}
+      {% if slot.entity and slot.entity != '' %}
+        {% set raw_state = states(slot.entity) %}
+        {% set has_value = raw_state not in ['unknown', 'unavailable', 'none', ''] %}
+        {% set unit = state_attr(slot.entity, 'unit_of_measurement') or '' %}
+        {% set label_text = slot.label if slot.label and slot.label != '' else (state_attr(slot.entity, 'friendly_name') or slot.entity) %}
+        {% set ns.list = ns.list + [{
+          'label': label_text,
+          'value_text': (raw_state ~ unit) if has_value else '--'
+        }] %}
+      {% endif %}
+    {% endfor %}
+    {{ ns.list }}
+  language_map: >
+    {% set map = {
+      "en": { "no_entities": "No entities configured.", "default_title": "Entities" },
+      "de": { "no_entities": "Keine Entitäten konfiguriert.", "default_title": "Entitäten" },
+      "nl": { "no_entities": "Geen entiteiten geconfigureerd.", "default_title": "Entiteiten" },
+      "fr": { "no_entities": "Aucune entité configurée.", "default_title": "Entités" },
+      "es": { "no_entities": "No hay entidades configuradas.", "default_title": "Entidades" },
+      "pl": { "no_entities": "Nie skonfigurowano żadnych encji.", "default_title": "Encje" },
+      "hr": { "no_entities": "Nije konfiguriran nijedan entitet.", "default_title": "Entiteti" },
+      "sv": { "no_entities": "Inga entiteter konfigurerade.", "default_title": "Entiteter" }
+    } %}
+    {{ map }}
+  header_title_display: >-
+    {{ header_title if header_title else language_map[weekday_lang]['default_title'] }}
+  updated_text: >-
+    {{ as_timestamp(now()) | timestamp_custom('%d-%m-%Y %-I:%M %p') if time_format == '12h' else as_timestamp(now()) | timestamp_custom('%d-%m-%Y %H:%M') }}
+
+trigger: !input automation_trigger
+conditions: !input automation_conditions
+
+action:
+  - choose:
+      - conditions:
+          - "{{ entities | length > 0 }}"
+        sequence:
+          - action: opendisplay.drawcustom
+            target:
+              device_id: !input displays
+            data:
+              background: white
+              rotate: !input rotate
+              payload: >
+                [
+                {% set ns_out = namespace(first=true) %}
+                {% set col1 = entities[:6] %}
+                {% set col2 = entities[6:12] %}
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "rectangle",
+                  "x_start": 0,
+                  "x_end": 384,
+                  "y_start": 0,
+                  "y_end": 26,
+                  "width": 0,
+                  "fill": "black",
+                  "outline": "black"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "icon",
+                  "value": "mdi:view-dashboard",
+                  "x": 2,
+                  "y": 1,
+                  "size": 24,
+                  "color": "white"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ header_title_display | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 28,
+                  "y": 13,
+                  "size": 18,
+                  "color": "white",
+                  "anchor": "lm"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": "{{ updated_text }}",
+                  "font": "{{ font_file }}",
+                  "x": 380,
+                  "y": 13,
+                  "size": 12,
+                  "color": "white",
+                  "anchor": "rm"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "line",
+                  "x_start": 192,
+                  "x_end": 192,
+                  "y_start": 30,
+                  "y_end": 172,
+                  "fill": "black",
+                  "width": 1
+                }
+                {% for item in col1 %}
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ item.label | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 5,
+                  "y": {{ 38 + loop.index0 * 24 }},
+                  "size": 14,
+                  "color": "black",
+                  "anchor": "lm"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ item.value_text | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 186,
+                  "y": {{ 38 + loop.index0 * 24 }},
+                  "size": 16,
+                  "color": "black",
+                  "anchor": "rm"
+                }
+                {% endfor %}
+                {% for item in col2 %}
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ item.label | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 198,
+                  "y": {{ 38 + loop.index0 * 24 }},
+                  "size": 14,
+                  "color": "black",
+                  "anchor": "lm"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ item.value_text | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 379,
+                  "y": {{ 38 + loop.index0 * 24 }},
+                  "size": 16,
+                  "color": "black",
+                  "anchor": "rm"
+                }
+                {% endfor %}
+                ]
+    default:
+      - action: opendisplay.drawcustom
+        target:
+          device_id: !input displays
+        data:
+          background: white
+          rotate: !input rotate
+          payload: >
+            [
+              {
+              "type": "text",
+              "value": {{ language_map[weekday_lang]['no_entities'] | tojson }},
+              "font": "{{ font_file }}",
+              "x": "50%",
+              "y": "50%",
+              "size": 22,
+              "color": "red",
+              "anchor": "mm",
+              "max_width": 340
+              }
+            ]
+mode: single

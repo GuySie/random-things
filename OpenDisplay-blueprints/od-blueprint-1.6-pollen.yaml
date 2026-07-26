@@ -398,6 +398,7 @@ action:
                   {
                     "type": "text",
                     "value": {{ pollen_label | tojson }},
+                    "font": "{{ font_file }}",
                     "x": 164,
                     "y": 7,
                     "size": 16,
@@ -428,6 +429,7 @@ action:
                   {
                     "type": "text",
                     "value": "{{ language_map[weekday_lang]['weekdays'][as_timestamp(weather_home_daily[forecast_entity]['forecast'][daily_offset].datetime) | timestamp_custom('%w') | int ] | upper }}",
+                    "font": "{{ font_file }}",
                     "x": 164,
                     "y": 103,
                     "size": 16,

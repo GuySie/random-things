@@ -1,0 +1,256 @@
+blueprint:
+  name: OpenDisplay Medication Reminder 2.9"
+  description: >
+    # OpenDisplay Medication Reminder (2.9")
+
+    A blueprint that turns a single physical button on a 2.9" 384 x 168 pixel e-paper tag into a medication log: press the button right after taking your medication, and the tag shows the exact time (and date) you pressed it — so a glance answers "did I already take this?" There's no history list and no periodic refresh; the display only updates on a press, and always shows the moment of that press. Created by Claude for [Guy Sie](https://github.com/guysie).
+
+    Developed against the [Solum Newton Pro 2.9" tag](https://www.solum-group.com/esl-n-iot/product-lineup/professional-esl/newton-pro) (single-button variant).
+
+    ## Prerequisites
+
+    - [OpenDisplay Integration](https://github.com/OpenDisplay/Home_Assistant_Integration) (v3.0.0-beta.8 or later) must be installed and configured
+
+    - For a nicer font add [`GothamRnd-Bold.ttf`](https://github.com/chunkysteveo/OpenEPaperLink-HA-Weatherman/raw/refs/heads/main/GothamRnd-Bold.ttf)
+
+    ## Note on the trigger
+
+    Unlike other blueprints in this collection, this one does not expose a generic trigger picker. Instead, pick your tag as the display below, then pick the button's own `event.*` entity (e.g. `event.<your_tag>_button_1`) as the trigger — the blueprint wires up the button-press detection for you from there.
+
+    ## Known upstream issue: header cropping workaround
+
+    There's currently an upstream OpenDisplay rendering bug that crops roughly the top two-thirds (~17px of the 26px header) off this canvas in this rotation. To compensate, every element in this payload is shifted down by a 17px `header_buffer` (see the `variables:` block), and the body text sizes/positions below the header were compressed slightly to still fit above the bottom edge (date: 28pt → 24pt, time: 60pt → 52pt, label: 18pt → 16pt).
+
+    **Once the upstream bug is fixed:** set `header_buffer` back to `0`, and restore the body text to its original un-compressed values: label `y: 46, size: 18` (kept centered between the header and the date), date `y: 80, size: 28`, time `y: 130, size: 60`.
+
+  domain: automation
+  input:
+    display:
+      name: E-Paper Display
+      description: The ESL to update when the button is pressed.
+      selector:
+        device:
+          filter:
+            integration: opendisplay
+    button_entity:
+      name: Button
+      description: The physical button's event entity, e.g. `event.<your_tag>_button_1`. Find it under the tag's device page in Settings > Devices & services.
+      selector:
+        entity:
+          filter:
+            domain: event
+    optional:
+      name: Optional
+      icon: "mdi:cog"
+      collapsed: true
+      input:
+        automation_conditions:
+          name: Conditions
+          description: Optional conditions that must be met to run the automation
+          default: []
+          selector:
+            condition:
+        time_format:
+          name: Time Format
+          description: Choose between 12-hour (AM/PM) or 24-hour format for the displayed time
+          default: "24h"
+          selector:
+            select:
+              options:
+                - label: "12-hour (AM/PM)"
+                  value: "12h"
+                - label: "24-hour"
+                  value: "24h"
+        weekday_format:
+          name: Language
+          description: Language for the weekday/month names and interface text
+          default: "en"
+          selector:
+            select:
+              options:
+                - label: "English"
+                  value: "en"
+                - label: "German"
+                  value: "de"
+                - label: "Dutch"
+                  value: "nl"
+                - label: "French"
+                  value: "fr"
+                - label: "Spanish"
+                  value: "es"
+                - label: "Polish"
+                  value: "pl"
+                - label: "Croatian"
+                  value: "hr"
+                - label: "Swedish"
+                  value: "sv"
+        header_title:
+          name: Header title
+          description: Text shown at the top-left of the display. Leave blank to use a translated default.
+          default: ""
+          selector:
+            text: {}
+        font_file:
+          name: Font file
+          description: "Path to a custom font file (default: ppb.ttf) For a better font, use `GothamRnd-Bold.ttf`"
+          default: ppb.ttf
+          selector:
+            text: {}
+        rotate:
+          name: Rotation
+          description: "Display rotation in degrees. This panel is natively portrait (168x384); use 270 to display this landscape (384x168) layout upright."
+          default: "270"
+          selector:
+            select:
+              options:
+                - label: "0"
+                  value: "0"
+                - label: "90"
+                  value: "90"
+                - label: "180"
+                  value: "180"
+                - label: "270"
+                  value: "270"
+
+trigger:
+  - trigger: state
+    entity_id: !input button_entity
+    attribute: event_type
+    to: "button_down"
+conditions: !input automation_conditions
+
+variables:
+  header_buffer: 17
+  time_format: !input time_format
+  weekday_lang: !input weekday_format
+  header_title: !input header_title
+  font_file: !input font_file
+  language_map: >
+    {% set map = {
+      "en": {
+        "weekdays": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"],
+        "months": ["January","February","March","April","May","June","July","August","September","October","November","December"],
+        "default_title": "Medication",
+        "taken_label": "Last taken at"
+      },
+      "de": {
+        "weekdays": ["Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag"],
+        "months": ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"],
+        "default_title": "Medikament",
+        "taken_label": "Zuletzt eingenommen um"
+      },
+      "nl": {
+        "weekdays": ["Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag","Zondag"],
+        "months": ["Januari","Februari","Maart","April","Mei","Juni","Juli","Augustus","September","Oktober","November","December"],
+        "default_title": "Medicatie",
+        "taken_label": "Laatst ingenomen om"
+      },
+      "fr": {
+        "weekdays": ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"],
+        "months": ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"],
+        "default_title": "Médicament",
+        "taken_label": "Dernière prise à"
+      },
+      "es": {
+        "weekdays": ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"],
+        "months": ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"],
+        "default_title": "Medicación",
+        "taken_label": "Última toma a las"
+      },
+      "pl": {
+        "weekdays": ["Poniedziałek","Wtorek","Środa","Czwartek","Piątek","Sobota","Niedziela"],
+        "months": ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec","Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"],
+        "default_title": "Lek",
+        "taken_label": "Ostatnio przyjęty o"
+      },
+      "hr": {
+        "weekdays": ["Ponedjeljak","Utorak","Srijeda","Četvrtak","Petak","Subota","Nedjelja"],
+        "months": ["Siječanj","Veljača","Ožujak","Travanj","Svibanj","Lipanj","Srpanj","Kolovoz","Rujan","Listopad","Studeni","Prosinac"],
+        "default_title": "Lijek",
+        "taken_label": "Zadnji put uzet u"
+      },
+      "sv": {
+        "weekdays": ["Måndag","Tisdag","Onsdag","Torsdag","Fredag","Lördag","Söndag"],
+        "months": ["Januari","Februari","Mars","April","Maj","Juni","Juli","Augusti","September","Oktober","November","December"],
+        "default_title": "Medicin",
+        "taken_label": "Senast tagen kl."
+      }
+    } %}
+    {{ map }}
+  header_title_display: >-
+    {{ header_title if header_title else language_map[weekday_lang]['default_title'] }}
+  press_time_label: >-
+    {{ as_timestamp(now()) | timestamp_custom('%-I:%M %p') if time_format == '12h' else as_timestamp(now()) | timestamp_custom('%H:%M') }}
+  press_date_label: >-
+    {{ language_map[weekday_lang]['weekdays'][now().weekday()] }} {{ now().day }} {{ language_map[weekday_lang]['months'][now().month - 1] }}
+
+action:
+  - action: opendisplay.drawcustom
+    target:
+      device_id: !input display
+    data:
+      background: white
+      rotate: !input rotate
+      payload: >
+        [
+        {
+          "type": "rectangle",
+          "x_start": 0,
+          "x_end": 384,
+          "y_start": {{ header_buffer }},
+          "y_end": {{ header_buffer + 26 }},
+          "width": 0,
+          "fill": "black",
+          "outline": "black"
+        },
+        {
+          "type": "icon",
+          "value": "mdi:pill",
+          "x": 2,
+          "y": {{ header_buffer + 1 }},
+          "size": 24,
+          "color": "white"
+        },
+        {
+          "type": "text",
+          "value": {{ header_title_display | tojson }},
+          "font": "{{ font_file }}",
+          "x": 28,
+          "y": {{ header_buffer + 13 }},
+          "size": 18,
+          "color": "white",
+          "anchor": "lm"
+        },
+        {
+          "type": "text",
+          "value": {{ language_map[weekday_lang]['taken_label'] | tojson }},
+          "font": "{{ font_file }}",
+          "x": 192,
+          "y": 61,
+          "size": 16,
+          "color": "black",
+          "anchor": "mm",
+          "max_width": 356
+        },
+        {
+          "type": "text",
+          "value": {{ press_date_label | tojson }},
+          "font": "{{ font_file }}",
+          "x": 192,
+          "y": 91,
+          "size": 24,
+          "color": "black",
+          "anchor": "mm"
+        },
+        {
+          "type": "text",
+          "value": "{{ press_time_label }}",
+          "font": "{{ font_file }}",
+          "x": 192,
+          "y": 135,
+          "size": 52,
+          "color": "black",
+          "anchor": "mm"
+        }
+        ]
+mode: single

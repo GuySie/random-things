@@ -398,6 +398,7 @@ action:
                   {
                     "type": "text",
                     "value": "{% if time_format == '12h' %}{{ as_timestamp(weather_home_hourly[forecast_entity]['forecast'][1].datetime) | timestamp_custom('%-I %p') }}{% else %}{{ as_timestamp(weather_home_hourly[forecast_entity]['forecast'][1].datetime) | timestamp_custom('%H:00') }}{% endif %}",
+                    "font": "{{ font_file }}",
                     "x": 192,
                     "y": 6,
                     "size": 13,
@@ -437,6 +438,7 @@ action:
                   {
                     "type": "text",
                     "value": {{ pollen_label | tojson }},
+                    "font": "{{ font_file }}",
                     "x": 192,
                     "y": 90,
                     "size": 13,
@@ -476,6 +478,7 @@ action:
                   {
                     "type": "text",
                     "value": "{{ language_map[weekday_lang]['weekdays'][as_timestamp(weather_home_daily[forecast_entity]['forecast'][daily_offset].datetime) | timestamp_custom('%w') | int ] | upper }}",
+                    "font": "{{ font_file }}",
                     "x": 318,
                     "y": 104,
                     "size": 20,
