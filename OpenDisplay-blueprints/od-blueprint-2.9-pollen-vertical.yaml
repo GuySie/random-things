@@ -3,7 +3,9 @@ blueprint:
   description: >
     # OpenDisplay Weatherman Display (2.9")
 
-    A blueprint that displays current weather conditions and forecasts on a vertical 2.9" (168 x 384 pixel, newer higher-resolution revision) E-Paper display. Shows current weather, next 3 hour forecasts, next day forecast, and weather icons with optional moon phase display. Can switch between displaying current wind speed or current precipitation. Also able to show pollen counts (from the Kleenex pollen integration), both general and for a specific type. Adapted by [Guy Sie](https://github.com/guysie) from the Weatherman blueprint for the 1.54" display originally by [Chunkysteveo](https://github.com/chunkysteveo/OpenEPaperLink-HA-Weatherman/), resized from the 2.6" vertical variant for a newer-revision 2.9" 168x384 panel.
+    A blueprint that displays current weather conditions and forecasts on a vertical 2.9" 168 x 384 e-paper tag. Shows current weather, next 3 hour forecasts, next day forecast, and weather icons with optional moon phase display. Can switch between displaying current wind speed or current precipitation. Also able to show pollen counts (from the Kleenex pollen integration), both general and for a specific type. Adapted by [Guy Sie](https://github.com/guysie) from the Weatherman blueprint for the 1.54" display originally by [Chunkysteveo](https://github.com/chunkysteveo/OpenEPaperLink-HA-Weatherman/).
+
+    Developed against the [Solum Newton Pro 2.9" tag](https://www.solum-group.com/esl-n-iot/product-lineup/professional-esl/newton-pro)
 
     ## Prerequisites
 

@@ -5,6 +5,8 @@ blueprint:
 
     A blueprint that displays soil moisture readings for up to 22 plants, laid out as two columns of 11 rows each, on a 4.2" 400 x 300 pixel e-paper tag. Each row's sensor and label are fully configurable, and plants are packed in order (no gaps) so leaving slots empty just shortens the list. A configurable threshold highlights dry plants in accent color. Created by Claude for [Guy Sie](https://github.com/guysie).
 
+    Developed against the [Solum Newton Pro 4.2" tag](https://www.solum-group.com/esl-n-iot/product-lineup/professional-esl/newton-pro)
+
     ## Prerequisites
 
     - [OpenDisplay Integration](https://github.com/OpenDisplay/Home_Assistant_Integration) (v3.0.0-beta.8 or later) must be installed and configured

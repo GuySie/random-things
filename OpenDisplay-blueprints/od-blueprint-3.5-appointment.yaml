@@ -5,6 +5,8 @@ blueprint:
 
     A blueprint that displays your next calendar appointment(s) on a 3.5" 384 x 184 pixel e-paper display. If a meeting is currently in progress it's shown (labeled "Now") together with the one after it; otherwise the next two upcoming appointments are shown. All-day events are ignored. Created by Claude, adapted from an automation by [Guy Sie](https://github.com/guysie).
 
+    Developed against the Solum Newton Core (not Core+) 3.5" tag, a discontinued product line. But should work on any BWR tag with the same 384 x 184 resolution.
+
     ## Prerequisites
 
     - [OpenDisplay Integration](https://github.com/OpenDisplay/Home_Assistant_Integration) (v3.0.0-beta.8 or later) must be installed and configured

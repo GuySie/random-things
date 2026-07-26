@@ -5,6 +5,8 @@ blueprint:
 
     A blueprint that displays current weather conditions and forecasts on 1.6" 200 x 200 e-paper tags. Shows current weather, next hour forecast, next day forecast, and weather icons with optional moon phase display. Can switch between displaying current wind speed or current precipitation. Also able to show pollen counts (from the Kleenex pollen integration), both general and for a specific type. Adapted by [Guy Sie](https://github.com/guysie) from the Weatherman blueprint for the 1.54" display originally by [Chunkysteveo](https://github.com/chunkysteveo/OpenEPaperLink-HA-Weatherman/).
 
+    Built against the [Solum Newton Pro 1.6" tag](https://www.solum-group.com/esl-n-iot/product-lineup/professional-esl/newton-pro)
+
     ## Prerequisites
 
     - [OpenDisplay Integration](https://github.com/OpenDisplay/Home_Assistant_Integration) (v3.0.0-beta.8 or later) must be installed and configured

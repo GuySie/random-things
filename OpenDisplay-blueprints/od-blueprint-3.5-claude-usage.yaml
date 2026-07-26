@@ -5,6 +5,8 @@ blueprint:
 
     A blueprint that displays Claude (Anthropic) API usage as a stack of labeled progress bars, each with a "resets at" caption, on a 3.5" 384 x 184 e-paper display. Supports up to 4 configurable bars, so it works with any usage sensor exposed by the integration below (session, weekly, weekly Sonnet, extra usage, or any dynamically-created per-model/per-surface bucket sensor). Each bar can optionally show a marker for how far through its period (e.g. a 5-hour session or 7-day week) we currently are, so you can compare usage pace against time elapsed at a glance. Created by Claude for [Guy Sie](https://github.com/guysie).
 
+    Developed against the Solum Newton Core (not Core+) 3.5" tag, a discontinued product line. But should work on any BWR tag with the same 384 x 184 resolution.
+
     ## Prerequisites
 
     - [OpenDisplay Integration](https://github.com/OpenDisplay/Home_Assistant_Integration) (v3.0.0-beta.8 or later) must be installed and configured

@@ -5,6 +5,8 @@ blueprint:
 
     A blueprint that displays a full weather dashboard on a 4.2" 400 x 300 e-paper tag: current conditions with wind, pressure, humidity, dew point, pollen and sunrise/sunset, a 4-hour forecast row, and a 5-day forecast row, with optional moon phase and pollen forecast display. Created by Claude, adapted by [Guy Sie](https://github.com/guysie) from the Weatherman blueprint originally by [Chunkysteveo](https://github.com/chunkysteveo/OpenEPaperLink-HA-Weatherman/).
 
+    Developed against the [Solum Newton Pro 4.2" tag](https://www.solum-group.com/esl-n-iot/product-lineup/professional-esl/newton-pro)
+
     ## Prerequisites
 
     - [OpenDisplay Integration](https://github.com/OpenDisplay/Home_Assistant_Integration) (v3.0.0-beta.8 or later) must be installed and configured
