@@ -5,7 +5,7 @@ blueprint:
 
     A blueprint that displays current weather conditions and forecasts on 1.6" 200 x 200 e-paper tags. Shows current weather, next hour forecast, next day forecast, and weather icons with optional moon phase display. Can switch between displaying current wind speed or current precipitation. Also able to show pollen counts (from the Kleenex pollen integration), both general and for a specific type. Adapted by [Guy Sie](https://github.com/guysie) from the Weatherman blueprint for the 1.54" display originally by [Chunkysteveo](https://github.com/chunkysteveo/OpenEPaperLink-HA-Weatherman/).
 
-    Built against the [Solum Newton Pro 1.6" tag](https://www.solum-group.com/esl-n-iot/product-lineup/professional-esl/newton-pro)
+    Developed against the [Solum Newton Pro 1.6" tag](https://www.solum-group.com/esl-n-iot/product-lineup/professional-esl/newton-pro)
 
     ## Prerequisites
 
@@ -95,7 +95,7 @@ blueprint:
                 - label: "Precipitation"
                   value: "precipitation"
         severe_temp_low:
-          name: Low temperature treshold
+          name: Low temperature threshold
           description: If this temperature or lower, indicate in accent color
           default: 3
           selector:
@@ -103,7 +103,7 @@ blueprint:
               unit_of_measurement: "°"
               mode: box
         severe_wind_high:
-          name: High wind treshold
+          name: High wind threshold
           description: If this windspeed or higher, indicate in accent color
           default: 75
           selector:
@@ -111,7 +111,7 @@ blueprint:
               unit_of_measurement: "km/h"
               mode: box
         severe_rain_high:
-          name: High precipitation treshold
+          name: High precipitation threshold
           description: If this precipitation or higher, indicate in accent color
           default: 8
           selector:
@@ -119,7 +119,7 @@ blueprint:
               unit_of_measurement: "mm"
               mode: box
         severe_pollen_high:
-          name: High pollen treshold
+          name: High pollen threshold
           description: If this amount of pollen or higher, indicate in accent color
           default: 81
           selector:
@@ -331,6 +331,8 @@ action:
 
               pollen_display: >
                 {% if pollen_sensor %}{% if pollen_type %}{{ state_attr(pollen_sensor, 'details') | selectattr('name', 'match', pollen_type) | map(attribute='value') | first }}{% else %}{{ (states(pollen_sensor) | float | round) }}{% endif %}{% endif %}
+              pollen_label: >-
+                {% if pollen_sensor %}{% if pollen_type %}{{ pollen_type }}{% else %}Pollen{% endif %}{% else %}{% if time_format == '12h' %}{{ as_timestamp(weather_home_hourly[forecast_entity]['forecast'][1].datetime) | timestamp_custom('%-I %p') }}{% else %}{{ as_timestamp(weather_home_hourly[forecast_entity]['forecast'][1].datetime) | timestamp_custom('%H:00') }}{% endif %}{% endif %}
 
           - action: opendisplay.drawcustom
             target:
@@ -340,7 +342,6 @@ action:
               rotate: !input rotate
               payload: >
                 [
-                  # Current Weather
                   {
                     "type": "icon",
                     "value": "{% set condition = states(forecast_entity) %}{% set is_night = states('sun.sun') == 'below_horizon' %}{{ (night_conditions_map if is_night else day_conditions_map)[condition] | default('mdi:weather-' ~ condition) }}",
@@ -387,10 +388,9 @@ action:
                     "color": "{% if wind_or_precipitation == 'windspeed' %}{{ 'black' if state_attr(forecast_entity,'wind_speed') | round < severe_wind_high else 'accent' }}{% else %}{{ 'black' if weather_home_hourly[forecast_entity]['forecast'][0].precipitation|round < severe_rain_high else 'accent' }}{% endif %}",
                     "anchor": "lt"
                   },
-                  # Next hour or Pollen today
                   {
                     "type": "text",
-                    "value": "{% if pollen_sensor %}{% if pollen_type %}{{ pollen_type }}{% else %}Pollen{% endif %}{% else %}{% if time_format == '12h' %}{{ as_timestamp(weather_home_hourly[forecast_entity]['forecast'][1].datetime) | timestamp_custom('%-I %p') }}{% else %}{{ as_timestamp(weather_home_hourly[forecast_entity]['forecast'][1].datetime) | timestamp_custom('%H:00') }}{% endif %}{% endif %}",
+                    "value": {{ pollen_label | tojson }},
                     "x": 164,
                     "y": 7,
                     "size": 16,
@@ -415,7 +415,6 @@ action:
                     "color": "{% if pollen_sensor %}{{ 'black' if pollen_display < severe_pollen_high else 'accent' }}{% else %}{{ 'black' if weather_home_hourly[forecast_entity]['forecast'][1].temperature|round > severe_temp_low else 'accent' }}{% endif %}",
                     "anchor": "mt"
                   },
-                  # Next Day
                   {
                     "type": "text",
                     "value": "{{ language_map[weekday_lang]['weekdays'][as_timestamp(weather_home_daily[forecast_entity]['forecast'][daily_offset].datetime) | timestamp_custom('%w') | int ] | upper }}",
@@ -485,3 +484,5 @@ action:
               "max_width": 197
               }
             ]
+
+mode: single

@@ -86,7 +86,7 @@ blueprint:
           selector:
             boolean: {}
         severe_temp_low:
-          name: Low temperature treshold
+          name: Low temperature threshold
           description: If this temperature or lower, indicate in accent color
           default: 3
           selector:
@@ -94,7 +94,7 @@ blueprint:
               unit_of_measurement: "°"
               mode: box
         severe_wind_high:
-          name: High wind treshold
+          name: High wind threshold
           description: If this windspeed or higher, indicate in accent color
           default: 50
           selector:
@@ -102,7 +102,7 @@ blueprint:
               unit_of_measurement: "km/h"
               mode: box
         severe_precipitation_hour:
-          name: High hourly precipitation treshold
+          name: High hourly precipitation threshold
           description: If an hour's forecast precipitation is this amount or higher, indicate in accent color
           default: 5
           selector:
@@ -110,7 +110,7 @@ blueprint:
               unit_of_measurement: "mm"
               mode: box
         severe_pollen_high:
-          name: High pollen treshold
+          name: High pollen threshold
           description: If this amount of pollen or higher, indicate in accent color
           default: 95
           selector:
@@ -274,7 +274,6 @@ action:
                   "hail",
                   "lightning",
                   "lightning-rainy",
-                  "pouring",
                   "snowy",
                   "snowy-rainy",
                   "windy",
@@ -786,3 +785,5 @@ action:
               "max_width": 340
               }
             ]
+
+mode: single

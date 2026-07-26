@@ -95,6 +95,12 @@ blueprint:
                   value: "hr"
                 - label: "Swedish"
                   value: "sv"
+        header_title:
+          name: Header title
+          description: Text shown at the top-left of the display, in the header bar. Leave blank to use a translated default.
+          default: ""
+          selector:
+            text: {}
         font_file:
           name: Font file
           description: "Path to a custom font file (default: ppb.ttf) For a better font, use `GothamRnd-Bold.ttf`"
@@ -123,6 +129,7 @@ variables:
   font_file: !input font_file
   time_format: !input time_format
   weekday_lang: !input weekday_format
+  header_title: !input header_title
   gap_header: 45
   gap_line: 2
   gap_title: 25
@@ -195,6 +202,8 @@ variables:
       }
     } %}
     {{ map }}
+  header_title_display: >-
+    {{ header_title if header_title else language_map[weekday_lang]['title'] }}
 
 trigger: !input automation_trigger
 conditions: !input automation_conditions
@@ -280,7 +289,7 @@ action:
                 },
                 {
                   "type": "text",
-                  "value": {{ language_map[weekday_lang]['title'] | tojson }},
+                  "value": {{ header_title_display | tojson }},
                   "font": "{{ font_file }}",
                   "x": 50,
                   "y": 22,

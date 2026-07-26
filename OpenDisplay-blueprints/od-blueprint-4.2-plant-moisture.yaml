@@ -361,8 +361,8 @@ blueprint:
               mode: box
         header_title:
           name: Header title
-          description: Text shown at the top-left of the display
-          default: "Plants"
+          description: Text shown at the top-left of the display. Leave blank to use a translated default.
+          default: ""
           selector:
             text: {}
         time_format:
@@ -526,16 +526,18 @@ variables:
     {{ ns.list }}
   language_map: >
     {% set map = {
-      "en": { "no_plants": "No plants configured." },
-      "de": { "no_plants": "Keine Pflanzen konfiguriert." },
-      "nl": { "no_plants": "Geen planten geconfigureerd." },
-      "fr": { "no_plants": "Aucune plante configurée." },
-      "es": { "no_plants": "No hay plantas configuradas." },
-      "pl": { "no_plants": "Nie skonfigurowano żadnych roślin." },
-      "hr": { "no_plants": "Nije konfigurirana nijedna biljka." },
-      "sv": { "no_plants": "Inga växter konfigurerade." }
+      "en": { "no_plants": "No plants configured.", "default_title": "Plants" },
+      "de": { "no_plants": "Keine Pflanzen konfiguriert.", "default_title": "Pflanzen" },
+      "nl": { "no_plants": "Geen planten geconfigureerd.", "default_title": "Planten" },
+      "fr": { "no_plants": "Aucune plante configurée.", "default_title": "Plantes" },
+      "es": { "no_plants": "No hay plantas configuradas.", "default_title": "Plantas" },
+      "pl": { "no_plants": "Nie skonfigurowano żadnych roślin.", "default_title": "Rośliny" },
+      "hr": { "no_plants": "Nije konfigurirana nijedna biljka.", "default_title": "Biljke" },
+      "sv": { "no_plants": "Inga växter konfigurerade.", "default_title": "Växter" }
     } %}
     {{ map }}
+  header_title_display: >-
+    {{ header_title if header_title else language_map[weekday_lang]['default_title'] }}
   updated_text: >-
     {{ as_timestamp(now()) | timestamp_custom('%d-%m-%Y %-I:%M %p') if time_format == '12h' else as_timestamp(now()) | timestamp_custom('%d-%m-%Y %H:%M') }}
 
@@ -577,7 +579,7 @@ action:
                 },
                 {
                   "type": "text",
-                  "value": {{ header_title | tojson }},
+                  "value": {{ header_title_display | tojson }},
                   "font": "{{ font_file }}",
                   "x": 28,
                   "y": 13,

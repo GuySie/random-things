@@ -68,7 +68,7 @@ blueprint:
           selector:
             boolean: {}
         severe_temp_low:
-          name: Low temperature treshold
+          name: Low temperature threshold
           description: If this temperature or lower, indicate in accent color
           default: 3
           selector:
@@ -226,7 +226,6 @@ action:
               rotate: !input rotate
               payload: >
                 [
-                  # Current Weather
                   {
                     "type": "icon",
                     "value": "{% set condition = states(forecast_entity) %}{% set is_night = states('sun.sun') == 'below_horizon' %}{{ (night_conditions_map if is_night else day_conditions_map)[condition] | default('mdi:weather-' ~ condition) }}",
@@ -275,3 +274,5 @@ action:
               "max_width": 195
               }
             ]
+
+mode: single
