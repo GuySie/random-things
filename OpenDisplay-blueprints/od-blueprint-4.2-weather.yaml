@@ -80,8 +80,8 @@ blueprint:
           selector:
             text:
         show_temp_unit:
-          name: Show Temperature unit
-          description: Show temperature unit (°C or °F)
+          name: Show units
+          description: Show units for all displayed values (temperature, wind, precipitation, humidity, pressure, pollen)
           default: true
           selector:
             boolean: {}
@@ -244,14 +244,19 @@ action:
             target:
               entity_id: "{{ forecast_entity }}"
             data:
-              type: hourly
-            response_variable: weather_home_hourly
-          - action: weather.get_forecasts
-            target:
-              entity_id: "{{ forecast_entity }}"
-            data:
               type: daily
             response_variable: weather_home_daily
+          - variables:
+              hourly_supported: "{{ (state_attr(forecast_entity, 'supported_features') | int(0)) | bitwise_and(2) > 0 }}"
+          - if:
+              - "{{ hourly_supported }}"
+            then:
+              - action: weather.get_forecasts
+                target:
+                  entity_id: "{{ forecast_entity }}"
+                data:
+                  type: hourly
+                response_variable: weather_home_hourly
           - variables:
               daily_offset: "{{ 0 if start_with_today else 1 }}"
               moon_available: >
@@ -337,7 +342,7 @@ action:
 
               hourly_forecast: >
                 {% set ns = namespace(list=[]) %}
-                {% set hourly_list = weather_home_hourly[forecast_entity]['forecast'] %}
+                {% set hourly_list = weather_home_hourly[forecast_entity]['forecast'] if hourly_supported else [] %}
                 {% for i in range(4) %}
                   {% if i < hourly_list | length %}
                     {% set fc = hourly_list[i] %}
@@ -507,7 +512,7 @@ action:
                 {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
-                  "value": "{{ state_attr(forecast_entity,'wind_speed') | round }}{{ state_attr(forecast_entity,'wind_speed_unit') }}",
+                  "value": "{{ state_attr(forecast_entity,'wind_speed') | round }}{% if show_temp_unit %}{{ state_attr(forecast_entity,'wind_speed_unit') }}{% endif %}",
                   "font": "{{ font_file }}",
                   "x": 118,
                   "y": 165,
@@ -518,7 +523,7 @@ action:
                 {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
                   "type": "text",
-                  "value": "{{ state_attr(forecast_entity,'pressure') | round }}{{ state_attr(forecast_entity,'pressure_unit') }}",
+                  "value": "{{ state_attr(forecast_entity,'pressure') | round }}{% if show_temp_unit %}{{ state_attr(forecast_entity,'pressure_unit') }}{% endif %}",
                   "font": "{{ font_file }}",
                   "x": 118,
                   "y": 185,
@@ -636,7 +641,7 @@ action:
                   },
                   {
                     "type": "icon",
-                    "value": "mdi:water",
+                    "value": "mdi:water-outline",
                     "x": {{ base_x - 1 }},
                     "y": 125,
                     "size": 20,
@@ -644,7 +649,7 @@ action:
                   },
                   {
                     "type": "text",
-                    "value": "{{ h.precipitation }}{{ state_attr(forecast_entity, 'precipitation_unit') }}",
+                    "value": "{{ h.precipitation }}{% if show_temp_unit %}{{ state_attr(forecast_entity, 'precipitation_unit') }}{% endif %}",
                     "font": "{{ font_file }}",
                     "x": {{ base_x + 16 }},
                     "y": 136,

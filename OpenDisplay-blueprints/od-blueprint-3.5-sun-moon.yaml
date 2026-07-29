@@ -1,0 +1,466 @@
+blueprint:
+  name: OpenDisplay Sun & Moon Position 3.5"
+  description: >
+    # OpenDisplay Sun & Moon Position (3.5")
+
+    A blueprint that displays today's sunrise, sunset, dawn, solar noon, and dusk times alongside a schematic horizon strip showing the sun's (and optionally the moon's) current position, on a 3.5" 384 x 180 e-paper tag. Adapted by Claude for [Guy Sie](https://github.com/guysie) from the [sun-stand automation](https://github.com/sgmobiledev/OpenEpaperLinkHATagSources/blob/main/2.66-SoluM-epaper-tags/2.66-sun-stand.yaml) originally built for a 2.66" tag.
+
+    Developed against the Solum Newton Core (not Core+) 3.5" tag, a discontinued product line. But should work on any BWR tag with the same 384 x 180 resolution.
+
+    ## Prerequisites
+
+    - [OpenDisplay Integration](https://github.com/OpenDisplay/Home_Assistant_Integration) (v3.0.0-beta.8 or later) must be installed and configured
+
+    - [Sun integration](https://www.home-assistant.io/integrations/sun) must be set up (provides sunrise/sunset/dawn/noon/dusk times and the sun's azimuth/elevation)
+
+    - Recommended optional integrations:
+      - [Moon integration](https://www.home-assistant.io/integrations/moon) for the moon phase icon
+      - [Lunar Phase integration](https://github.com/ngocjohn/lunar-phase) (HACS custom integration) for the moon's azimuth/altitude, if you want the moon plotted on the horizon strip like the sun. Home Assistant's core Moon integration only exposes phase, not position. Lunar Phase also exposes its own moon phase sensor, useful if you'd rather not add the core Moon integration too.
+
+    - For a nicer font add [`GothamRnd-Bold.ttf`](https://github.com/chunkysteveo/OpenEPaperLink-HA-Weatherman/raw/refs/heads/main/GothamRnd-Bold.ttf)
+
+  domain: automation
+  input:
+    displays:
+      name: E-Paper Display(s)
+      description: What 3.5" ESLs to display the content on
+      selector:
+        device:
+          multiple: true
+          filter:
+            integration: opendisplay
+    automation_trigger:
+      name: Trigger
+      description: When to trigger the automation
+      selector:
+        trigger:
+    optional:
+      name: Optional
+      icon: "mdi:cog"
+      collapsed: true
+      input:
+        automation_conditions:
+          name: Conditions
+          description: Optional conditions that must be met to run the automation
+          default: []
+          selector:
+            condition:
+        moon_azimuth_sensor:
+          name: Moon azimuth sensor
+          description: Optional sensor reporting the moon's azimuth in degrees, e.g. the "Moon Azimuth" sensor from the Lunar Phase integration. Home Assistant's core Moon integration doesn't provide this. Leave blank to omit the moon from the horizon strip.
+          default: ""
+          selector:
+            entity:
+              domain: sensor
+        moon_altitude_sensor:
+          name: Moon altitude sensor
+          description: Optional sensor reporting the moon's altitude (elevation) in degrees, e.g. the "Moon Altitude" sensor from the Lunar Phase integration. Leave blank to omit the moon from the horizon strip.
+          default: ""
+          selector:
+            entity:
+              domain: sensor
+        moon_phase_sensor:
+          name: Moon phase sensor
+          description: Optional moon phase sensor used to pick the moon icon. Leave blank to use Home Assistant's core `sensor.moon_phase`. Set this if you only have the Lunar Phase integration installed (its "Moon Phase" sensor uses a different entity_id per configured location, not `sensor.moon_phase`).
+          default: ""
+          selector:
+            entity:
+              domain: sensor
+        header_title:
+          name: Header title
+          description: Text shown at the top-left of the display, in the header bar. Leave blank to use a translated default.
+          default: ""
+          selector:
+            text: {}
+        time_format:
+          name: Time Format
+          description: Choose between 12-hour (AM/PM) or 24-hour format
+          default: "24h"
+          selector:
+            select:
+              options:
+                - label: "12-hour (AM/PM)"
+                  value: "12h"
+                - label: "24-hour"
+                  value: "24h"
+        weekday_format:
+          name: Language
+          description: Language for the interface
+          default: "en"
+          selector:
+            select:
+              options:
+                - label: "English"
+                  value: "en"
+                - label: "German"
+                  value: "de"
+                - label: "Dutch"
+                  value: "nl"
+                - label: "French"
+                  value: "fr"
+                - label: "Spanish"
+                  value: "es"
+                - label: "Polish"
+                  value: "pl"
+                - label: "Croatian"
+                  value: "hr"
+                - label: "Swedish"
+                  value: "sv"
+        font_file:
+          name: Font file
+          description: "Path to a custom font file (default: ppb.ttf) For a better font, use `GothamRnd-Bold.ttf`"
+          default: ppb.ttf
+          selector:
+            text: {}
+        rotate:
+          name: Rotation
+          description: "Display rotation in degrees. This panel is natively portrait; use 270 to display this landscape (384x180) layout upright."
+          default: "270"
+          selector:
+            select:
+              options:
+                - label: "0"
+                  value: "0"
+                - label: "90"
+                  value: "90"
+                - label: "180"
+                  value: "180"
+                - label: "270"
+                  value: "270"
+
+variables:
+  font_file: !input font_file
+  weekday_lang: !input weekday_format
+  time_format: !input time_format
+  header_title: !input header_title
+  moon_azimuth_sensor: !input moon_azimuth_sensor
+  moon_altitude_sensor: !input moon_altitude_sensor
+  moon_phase_sensor: !input moon_phase_sensor
+  moon_phase_entity: >-
+    {{ moon_phase_sensor if (moon_phase_sensor | default('') | trim != '') else 'sensor.moon_phase' }}
+  language_map: >
+    {% set map = {
+      "en": { "sunrise": "Sunrise", "sunset": "Sunset", "dawn": "Dawn", "noon": "Solar Noon", "dusk": "Dusk", "default_title": "Sun & Moon", "no_sun": "Sun integration not available." },
+      "de": { "sunrise": "Sonnenaufgang", "sunset": "Sonnenuntergang", "dawn": "Morgendämmerung", "noon": "Mittag", "dusk": "Abenddämmerung", "default_title": "Sonne & Mond", "no_sun": "Sonnen-Integration nicht verfügbar." },
+      "nl": { "sunrise": "Zonsopkomst", "sunset": "Zonsondergang", "dawn": "Dageraad", "noon": "Middag", "dusk": "Schemering", "default_title": "Zon & Maan", "no_sun": "Zon-integratie niet beschikbaar." },
+      "fr": { "sunrise": "Lever du soleil", "sunset": "Coucher du soleil", "dawn": "Aube", "noon": "Midi solaire", "dusk": "Crépuscule", "default_title": "Soleil & Lune", "no_sun": "Intégration soleil non disponible." },
+      "es": { "sunrise": "Amanecer", "sunset": "Atardecer", "dawn": "Alba", "noon": "Mediodía solar", "dusk": "Crepúsculo", "default_title": "Sol y Luna", "no_sun": "Integración de sol no disponible." },
+      "pl": { "sunrise": "Wschód słońca", "sunset": "Zachód słońca", "dawn": "Świt", "noon": "Południe słoneczne", "dusk": "Zmierzch", "default_title": "Słońce i Księżyc", "no_sun": "Integracja słońca niedostępna." },
+      "hr": { "sunrise": "Izlazak sunca", "sunset": "Zalazak sunca", "dawn": "Zora", "noon": "Solarno podne", "dusk": "Sumrak", "default_title": "Sunce i Mjesec", "no_sun": "Integracija sunca nije dostupna." },
+      "sv": { "sunrise": "Soluppgång", "sunset": "Solnedgång", "dawn": "Gryning", "noon": "Solmiddag", "dusk": "Skymning", "default_title": "Sol & Måne", "no_sun": "Sol-integrationen är inte tillgänglig." }
+    } %}
+    {{ map }}
+  header_title_display: >-
+    {{ header_title if header_title else language_map[weekday_lang]['default_title'] }}
+  weekday_short_map: >
+    {% set map = {
+      "en": ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
+      "de": ["Mo","Di","Mi","Do","Fr","Sa","So"],
+      "nl": ["Ma","Di","Wo","Do","Vr","Za","Zo"],
+      "fr": ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"],
+      "es": ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"],
+      "pl": ["Pon","Wt","Śr","Czw","Pt","Sob","Nie"],
+      "hr": ["Pon","Uto","Sri","Čet","Pet","Sub","Ned"],
+      "sv": ["Mån","Tis","Ons","Tor","Fre","Lör","Sön"]
+    } %}
+    {{ map }}
+  months_short_map: >
+    {% set map = {
+      "en": ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],
+      "de": ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"],
+      "nl": ["Jan","Feb","Mrt","Apr","Mei","Jun","Jul","Aug","Sep","Okt","Nov","Dec"],
+      "fr": ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"],
+      "es": ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"],
+      "pl": ["Sty","Lut","Mar","Kwi","Maj","Cze","Lip","Sie","Wrz","Paź","Lis","Gru"],
+      "hr": ["Sij","Velj","Ožu","Tra","Svi","Lip","Srp","Kol","Ruj","Lis","Stu","Pro"],
+      "sv": ["Jan","Feb","Mar","Apr","Maj","Jun","Jul","Aug","Sep","Okt","Nov","Dec"]
+    } %}
+    {{ map }}
+  updated_text: >-
+    {% set time_str = as_timestamp(now()) | timestamp_custom('%H:%M') if time_format == '24h' else as_timestamp(now()) | timestamp_custom('%-I:%M %p') %}
+    {{ weekday_short_map[weekday_lang][now().weekday()] }} {{ now().day }} {{ months_short_map[weekday_lang][now().month - 1] }}, {{ time_str }}
+  sun_available: >-
+    {{ states('sun.sun') not in ['unknown', 'unavailable'] }}
+  moon_position_available: >-
+    {{ (moon_azimuth_sensor | default('') | trim != '') and (moon_altitude_sensor | default('') | trim != '') }}
+  moon_phase_available: >-
+    {{ states(moon_phase_entity) not in ['unknown', 'unavailable'] }}
+  moon_icon: >-
+    {% set moon_phase = states(moon_phase_entity) %}
+    {% if moon_phase == 'new_moon' %}
+      moon-new
+    {% elif moon_phase == 'full_moon' %}
+      moon-full
+    {% else %}
+      {{ 'moon-' ~ moon_phase | replace('_', '-') }}
+    {% endif %}
+
+trigger: !input automation_trigger
+conditions: !input automation_conditions
+
+action:
+  - choose:
+      - conditions:
+          - "{{ sun_available }}"
+        sequence:
+          - action: opendisplay.drawcustom
+            target:
+              device_id: !input displays
+            data:
+              background: white
+              rotate: !input rotate
+              payload: >
+                [
+                {% set line_y = 124 %}
+                {% set line_x_start = 36 %}
+                {% set line_x_end = 348 %}
+                {% set elevation_scale = 50 %}
+                {% set sun_azimuth = state_attr('sun.sun', 'azimuth') | float(0) %}
+                {% set sun_elevation = state_attr('sun.sun', 'elevation') | float(0) %}
+                {% set sun_cx = line_x_start + (sun_azimuth / 360 * (line_x_end - line_x_start)) %}
+                {% set sun_cy = line_y - (sun_elevation / 90 * elevation_scale) %}
+                {% set sun_size = 18 %}
+                {% set moon_azimuth = states(moon_azimuth_sensor) | float(0) if moon_position_available else 0 %}
+                {% set moon_altitude = states(moon_altitude_sensor) | float(0) if moon_position_available else 0 %}
+                {% set moon_altitude_clamped = [[moon_altitude, 0] | max, 90] | min %}
+                {% set moon_cx = line_x_start + (moon_azimuth / 360 * (line_x_end - line_x_start)) %}
+                {% set moon_cy = line_y - (moon_altitude_clamped / 90 * elevation_scale) %}
+                {% set moon_size = 20 %}
+                {% set ns_out = namespace(first=true) %}
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "rectangle",
+                  "x_start": 0,
+                  "x_end": 384,
+                  "y_start": 0,
+                  "y_end": 26,
+                  "fill": "black",
+                  "outline": "black",
+                  "width": 0
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "icon",
+                  "value": "mdi:weather-sunset",
+                  "x": 2,
+                  "y": 1,
+                  "size": 24,
+                  "color": "white"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ header_title_display | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 28,
+                  "y": 13,
+                  "size": 18,
+                  "color": "white",
+                  "anchor": "lm"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": "{{ updated_text }}",
+                  "font": "{{ font_file }}",
+                  "x": 380,
+                  "y": 13,
+                  "size": 12,
+                  "color": "white",
+                  "anchor": "rm"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ language_map[weekday_lang]['sunrise'] | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 96,
+                  "y": 36,
+                  "size": 12,
+                  "color": "black",
+                  "anchor": "mt"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": "{% if time_format == '12h' %}{{ as_timestamp(state_attr('sun.sun', 'next_rising')) | timestamp_custom('%-I:%M %p') }}{% else %}{{ as_timestamp(state_attr('sun.sun', 'next_rising')) | timestamp_custom('%H:%M') }}{% endif %}",
+                  "font": "{{ font_file }}",
+                  "x": 96,
+                  "y": 50,
+                  "size": 12,
+                  "color": "black",
+                  "anchor": "mt"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ language_map[weekday_lang]['sunset'] | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 288,
+                  "y": 36,
+                  "size": 12,
+                  "color": "black",
+                  "anchor": "mt"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": "{% if time_format == '12h' %}{{ as_timestamp(state_attr('sun.sun', 'next_setting')) | timestamp_custom('%-I:%M %p') }}{% else %}{{ as_timestamp(state_attr('sun.sun', 'next_setting')) | timestamp_custom('%H:%M') }}{% endif %}",
+                  "font": "{{ font_file }}",
+                  "x": 288,
+                  "y": 50,
+                  "size": 12,
+                  "color": "black",
+                  "anchor": "mt"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "line",
+                  "x_start": {{ line_x_start }},
+                  "x_end": {{ line_x_end }},
+                  "y_start": {{ line_y }},
+                  "y_end": {{ line_y }},
+                  "color": "black",
+                  "width": 1
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "icon",
+                  "value": "mdi:weather-sunset-up",
+                  "x": {{ (14 - 11) }},
+                  "y": {{ (line_y - 11) | round | int }},
+                  "size": 22
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "icon",
+                  "value": "mdi:weather-sunny",
+                  "x": {{ (192 - 10) }},
+                  "y": {{ (line_y - 10) | round | int }},
+                  "size": 20
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "icon",
+                  "value": "mdi:weather-sunset-down",
+                  "x": {{ (370 - 11) }},
+                  "y": {{ (line_y - 11) | round | int }},
+                  "size": 22
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "icon",
+                  "value": "mdi:decagram-outline",
+                  "x": {{ (sun_cx - (sun_size / 2)) | round | int }},
+                  "y": {{ (sun_cy - (sun_size / 2)) | round | int }},
+                  "size": {{ sun_size }}
+                }
+                {% if moon_position_available %}
+                  {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                  {
+                    "type": "icon",
+                    "value": "{{ moon_icon }}",
+                    "x": {{ (moon_cx - (moon_size / 2)) | round | int }},
+                    "y": {{ (moon_cy - (moon_size / 2)) | round | int }},
+                    "size": {{ moon_size }}
+                  }
+                {% elif moon_phase_available %}
+                  {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                  {
+                    "type": "icon",
+                    "value": "{{ moon_icon }}",
+                    "x": 352,
+                    "y": 32,
+                    "size": 16
+                  }
+                {% endif %}
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ language_map[weekday_lang]['dawn'] | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 96,
+                  "y": 138,
+                  "size": 12,
+                  "color": "black",
+                  "anchor": "mt"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": "{% if time_format == '12h' %}{{ as_timestamp(state_attr('sun.sun', 'next_dawn')) | timestamp_custom('%-I:%M %p') }}{% else %}{{ as_timestamp(state_attr('sun.sun', 'next_dawn')) | timestamp_custom('%H:%M') }}{% endif %}",
+                  "font": "{{ font_file }}",
+                  "x": 96,
+                  "y": 152,
+                  "size": 12,
+                  "color": "black",
+                  "anchor": "mt"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ language_map[weekday_lang]['noon'] | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 192,
+                  "y": 138,
+                  "size": 12,
+                  "color": "black",
+                  "anchor": "mt"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": "{% if time_format == '12h' %}{{ as_timestamp(state_attr('sun.sun', 'next_noon')) | timestamp_custom('%-I:%M %p') }}{% else %}{{ as_timestamp(state_attr('sun.sun', 'next_noon')) | timestamp_custom('%H:%M') }}{% endif %}",
+                  "font": "{{ font_file }}",
+                  "x": 192,
+                  "y": 152,
+                  "size": 12,
+                  "color": "black",
+                  "anchor": "mt"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ language_map[weekday_lang]['dusk'] | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 288,
+                  "y": 138,
+                  "size": 12,
+                  "color": "black",
+                  "anchor": "mt"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": "{% if time_format == '12h' %}{{ as_timestamp(state_attr('sun.sun', 'next_dusk')) | timestamp_custom('%-I:%M %p') }}{% else %}{{ as_timestamp(state_attr('sun.sun', 'next_dusk')) | timestamp_custom('%H:%M') }}{% endif %}",
+                  "font": "{{ font_file }}",
+                  "x": 288,
+                  "y": 152,
+                  "size": 12,
+                  "color": "black",
+                  "anchor": "mt"
+                }
+                ]
+    default:
+      - action: opendisplay.drawcustom
+        target:
+          device_id: !input displays
+        data:
+          background: white
+          rotate: !input rotate
+          payload: >
+            [
+              {
+              "type": "text",
+              "value": {{ language_map[weekday_lang]['no_sun'] | tojson }},
+              "font": "{{ font_file }}",
+              "x": "50%",
+              "y": "50%",
+              "size": 20,
+              "color": "red",
+              "anchor": "mm",
+              "max_width": 340
+              }
+            ]
+
+mode: single

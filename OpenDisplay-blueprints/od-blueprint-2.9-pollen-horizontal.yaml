@@ -78,8 +78,8 @@ blueprint:
           selector:
             text:
         show_temp_unit:
-          name: Show Temperature unit
-          description: Show units (temperature °C/°F and pollen count)
+          name: Show units
+          description: Show units for all displayed values (temperature, wind, precipitation, humidity, pressure, pollen)
           default: true
           selector:
             boolean: {}
@@ -94,6 +94,17 @@ blueprint:
                   value: "windspeed"
                 - label: "Precipitation"
                   value: "precipitation"
+        next_forecast_content:
+          name: Next forecast box content
+          description: What to show in the top forecast box. Automatically falls back to humidity if the weather entity doesn't support hourly forecasts, regardless of this setting.
+          default: "forecast"
+          selector:
+            select:
+              options:
+                - label: "Hourly Forecast"
+                  value: "forecast"
+                - label: "Humidity"
+                  value: "humidity"
         severe_temp_low:
           name: Low temperature threshold
           description: If this temperature or lower, indicate in accent color
@@ -194,6 +205,7 @@ variables:
   font_file: !input font_file
   time_format: !input time_format
   wind_or_precipitation: !input wind_or_precipitation
+  next_forecast_content: !input next_forecast_content
   weekday_lang: !input weekday_format
   start_with_today: !input start_with_today
   pollen_sensor: !input pollen_sensor
@@ -254,14 +266,19 @@ action:
             target:
               entity_id: "{{ forecast_entity }}"
             data:
-              type: hourly
-            response_variable: weather_home_hourly
-          - action: weather.get_forecasts
-            target:
-              entity_id: "{{ forecast_entity }}"
-            data:
               type: daily
             response_variable: weather_home_daily
+          - variables:
+              hourly_supported: "{{ (state_attr(forecast_entity, 'supported_features') | int(0)) | bitwise_and(2) > 0 }}"
+          - if:
+              - "{{ hourly_supported }}"
+            then:
+              - action: weather.get_forecasts
+                target:
+                  entity_id: "{{ forecast_entity }}"
+                data:
+                  type: hourly
+                response_variable: weather_home_hourly
           - variables:
               daily_offset: "{{ 0 if start_with_today else 1 }}"
               moon_available: >
@@ -331,8 +348,63 @@ action:
 
               pollen_display: >
                 {% if pollen_sensor %}{% if pollen_type %}{{ state_attr(pollen_sensor, 'details') | selectattr('name', 'match', pollen_type) | map(attribute='value') | first }}{% else %}{{ (states(pollen_sensor) | float | round) }}{% endif %}{% endif %}
+
+          - variables:
+              current_precip: >
+                {% if hourly_supported %}{{ weather_home_hourly[forecast_entity]['forecast'][0].precipitation }}{% else %}{{ weather_home_daily[forecast_entity]['forecast'][0].precipitation | default(0) }}{% endif %}
+              next_forecast: >
+                {% set ns = namespace(list=[]) %}
+                {% if hourly_supported and next_forecast_content == 'forecast' %}
+                  {% set fc = weather_home_hourly[forecast_entity]['forecast'][1] %}
+                  {% set forecast_time = as_timestamp(fc.datetime) %}
+                  {% set condition = fc.condition %}
+                  {% set is_night = sun_available and ((states('sun.sun') == 'above_horizon' and forecast_time > as_timestamp(state_attr('sun.sun', 'next_setting'))) or (states('sun.sun') == 'below_horizon' and forecast_time < as_timestamp(state_attr('sun.sun', 'next_rising')))) %}
+                  {% set ns.list = ns.list + [{
+                    'label': (as_timestamp(fc.datetime) | timestamp_custom('%-I %p')) if time_format == '12h' else (as_timestamp(fc.datetime) | timestamp_custom('%H:00')),
+                    'icon': (night_conditions_map if is_night else day_conditions_map)[condition] | default('mdi:weather-' ~ condition),
+                    'is_severe': condition in severe_weather,
+                    'temp': fc.temperature | round,
+                    'unit': (state_attr(forecast_entity,'temperature_unit') ~ '') if show_temp_unit else '°',
+                    'temp_severe': fc.temperature | round <= severe_temp_low
+                  }] %}
+                {% else %}
+                  {% set humidity = state_attr(forecast_entity, 'humidity') %}
+                  {% set ns.list = ns.list + [{
+                    'label': '',
+                    'icon': 'mdi:water-percent',
+                    'is_severe': false,
+                    'temp': humidity | round if humidity is not none else 0,
+                    'unit': '%',
+                    'temp_severe': false
+                  }] %}
+                {% endif %}
+                {% if hourly_supported %}
+                  {% set fc = weather_home_hourly[forecast_entity]['forecast'][2] %}
+                  {% set forecast_time = as_timestamp(fc.datetime) %}
+                  {% set condition = fc.condition %}
+                  {% set is_night = sun_available and ((states('sun.sun') == 'above_horizon' and forecast_time > as_timestamp(state_attr('sun.sun', 'next_setting'))) or (states('sun.sun') == 'below_horizon' and forecast_time < as_timestamp(state_attr('sun.sun', 'next_rising')))) %}
+                  {% set ns.list = ns.list + [{
+                    'label': (as_timestamp(fc.datetime) | timestamp_custom('%-I %p')) if time_format == '12h' else (as_timestamp(fc.datetime) | timestamp_custom('%H:00')),
+                    'icon': (night_conditions_map if is_night else day_conditions_map)[condition] | default('mdi:weather-' ~ condition),
+                    'is_severe': condition in severe_weather,
+                    'temp': fc.temperature | round
+                  }] %}
+                {% else %}
+                  {% set daily_src = weather_home_daily[forecast_entity]['forecast'] %}
+                  {% if (daily_offset + 2) < daily_src | length %}
+                    {% set fc = daily_src[daily_offset + 2] %}
+                    {% set condition = fc.condition %}
+                    {% set ns.list = ns.list + [{
+                      'label': language_map[weekday_lang]['weekdays'][as_timestamp(fc.datetime) | timestamp_custom('%w') | int] | upper,
+                      'icon': day_conditions_map[condition] | default('mdi:weather-' ~ condition),
+                      'is_severe': condition in severe_weather,
+                      'temp': fc.temperature | round
+                    }] %}
+                  {% endif %}
+                {% endif %}
+                {{ ns.list }}
               pollen_label: >-
-                {% if pollen_sensor %}{% if pollen_type %}{{ pollen_type }}{% else %}Pollen{% endif %}{% else %}{% if time_format == '12h' %}{{ as_timestamp(weather_home_hourly[forecast_entity]['forecast'][2].datetime) | timestamp_custom('%-I %p') }}{% else %}{{ as_timestamp(weather_home_hourly[forecast_entity]['forecast'][2].datetime) | timestamp_custom('%H:00') }}{% endif %}{% endif %}
+                {% if pollen_sensor %}{% if pollen_type %}{{ pollen_type }}{% else %}Pollen{% endif %}{% else %}{{ next_forecast[-1].label }}{% endif %}
 
           - action: opendisplay.drawcustom
             target:
@@ -377,27 +449,27 @@ action:
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                   {
                     "type": "icon",
-                    "value": "{% if wind_or_precipitation == 'windspeed' %}{{ "%s" % (["arrow-down","arrow-bottom-left","arrow-left","arrow-top-left","arrow-up","arrow-top-right","arrow-right", "arrow-bottom-right","arrow-down"][(state_attr(forecast_entity, 'wind_bearing')/45) | round]) }}{% else %}water{% endif %}",
+                    "value": "{% if wind_or_precipitation == 'windspeed' %}{{ "%s" % (["arrow-down","arrow-bottom-left","arrow-left","arrow-top-left","arrow-up","arrow-top-right","arrow-right", "arrow-bottom-right","arrow-down"][(state_attr(forecast_entity, 'wind_bearing')/45) | round]) }}{% else %}water-outline{% endif %}",
                     "x": 8,
                     "y": 143,
                     "size": 22,
-                    "color": "{% if wind_or_precipitation == 'windspeed' %}{{ 'black' if state_attr(forecast_entity,'wind_speed') | round < severe_wind_high else 'accent' }}{% else %}{{ 'black' if weather_home_hourly[forecast_entity]['forecast'][0].precipitation|round < severe_rain_high else 'accent' }}{% endif %}"
+                    "color": "{% if wind_or_precipitation == 'windspeed' %}{{ 'black' if state_attr(forecast_entity,'wind_speed') | round < severe_wind_high else 'accent' }}{% else %}{{ 'black' if current_precip|round < severe_rain_high else 'accent' }}{% endif %}"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                   {
                     "type": "text",
-                    "value": "{% if wind_or_precipitation == 'windspeed' %}{{ state_attr(forecast_entity, 'wind_speed')| round }}{{ state_attr(forecast_entity, 'wind_speed_unit')}}{% else %}{{ weather_home_hourly[forecast_entity]['forecast'][0].precipitation }}{{ state_attr(forecast_entity, 'precipitation_unit')}}{% endif %}",
+                    "value": "{% if wind_or_precipitation == 'windspeed' %}{{ state_attr(forecast_entity, 'wind_speed')| round }}{% if show_temp_unit %}{{ state_attr(forecast_entity, 'wind_speed_unit')}}{% endif %}{% else %}{{ current_precip }}{% if show_temp_unit %}{{ state_attr(forecast_entity, 'precipitation_unit')}}{% endif %}{% endif %}",
                     "font": "{{ font_file }}",
                     "x": 34,
                     "y": 146,
                     "size": 20,
-                    "color": "{% if wind_or_precipitation == 'windspeed' %}{{ 'black' if state_attr(forecast_entity,'wind_speed') | round < severe_wind_high else 'accent' }}{% else %}{{ 'black' if weather_home_hourly[forecast_entity]['forecast'][0].precipitation|round < severe_rain_high else 'accent' }}{% endif %}",
+                    "color": "{% if wind_or_precipitation == 'windspeed' %}{{ 'black' if state_attr(forecast_entity,'wind_speed') | round < severe_wind_high else 'accent' }}{% else %}{{ 'black' if current_precip|round < severe_rain_high else 'accent' }}{% endif %}",
                     "anchor": "lt"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                   {
                     "type": "text",
-                    "value": "{% if time_format == '12h' %}{{ as_timestamp(weather_home_hourly[forecast_entity]['forecast'][1].datetime) | timestamp_custom('%-I %p') }}{% else %}{{ as_timestamp(weather_home_hourly[forecast_entity]['forecast'][1].datetime) | timestamp_custom('%H:00') }}{% endif %}",
+                    "value": "{{ next_forecast[0].label }}",
                     "font": "{{ font_file }}",
                     "x": 192,
                     "y": 6,
@@ -408,21 +480,21 @@ action:
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                   {
                     "type": "icon",
-                    "value": "{% set forecast_time = as_timestamp(weather_home_hourly[forecast_entity]['forecast'][1].datetime) %}{% set condition = weather_home_hourly[forecast_entity]['forecast'][1].condition %}{%if sun_available %}{% set is_night = (states('sun.sun') == 'above_horizon' and forecast_time > as_timestamp(state_attr('sun.sun', 'next_setting'))) or (states('sun.sun') == 'below_horizon' and forecast_time < as_timestamp(state_attr('sun.sun', 'next_rising'))) %}{{ (night_conditions_map if is_night else day_conditions_map)[condition] | default('mdi:weather-' ~ condition) }}{% else %}{{ day_conditions_map[condition] | default('mdi:weather-' ~ condition)}}{% endif %}",
+                    "value": "{{ next_forecast[0].icon }}",
                     "x": 173,
                     "y": 21,
                     "size": 38,
-                    "color": "{{ 'accent' if weather_home_hourly[forecast_entity]['forecast'][1].condition in severe_weather else 'black' }}"
+                    "color": "{{ 'accent' if next_forecast[0].is_severe else 'black' }}"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                   {
                     "type": "text",
-                    "value": "{{ weather_home_hourly[forecast_entity]['forecast'][1].temperature|round }}{% if show_temp_unit%}{{ state_attr(forecast_entity,'temperature_unit') }}{% else %}°{% endif %}",
+                    "value": "{{ next_forecast[0].temp }}{{ next_forecast[0].unit }}",
                     "font": "{{ font_file }}",
                     "x": 192,
                     "y": 62,
                     "size": 20,
-                    "color": "{{ 'black' if weather_home_hourly[forecast_entity]['forecast'][1].temperature|round > severe_temp_low else 'accent' }}",
+                    "color": "{{ 'accent' if next_forecast[0].temp_severe else 'black' }}",
                     "anchor": "mt"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
@@ -448,21 +520,21 @@ action:
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                   {
                     "type": "icon",
-                    "value": "{% if pollen_sensor %}{{ 'flower' if pollen_display < severe_pollen_high else 'flower-pollen' }}{% else %}{% set forecast_time = as_timestamp(weather_home_hourly[forecast_entity]['forecast'][2].datetime) %}{% set condition = weather_home_hourly[forecast_entity]['forecast'][2].condition %}{%if sun_available %}{% set is_night = (states('sun.sun') == 'above_horizon' and forecast_time > as_timestamp(state_attr('sun.sun', 'next_setting'))) or (states('sun.sun') == 'below_horizon' and forecast_time < as_timestamp(state_attr('sun.sun', 'next_rising'))) %}{{ (night_conditions_map if is_night else day_conditions_map)[condition] | default('mdi:weather-' ~ condition) }}{% else %}{{ day_conditions_map[condition] | default('mdi:weather-' ~ condition)}}{% endif %}{% endif %}",
+                    "value": "{% if pollen_sensor %}{{ 'flower' if pollen_display < severe_pollen_high else 'flower-pollen' }}{% else %}{{ next_forecast[-1].icon }}{% endif %}",
                     "x": 173,
                     "y": 105,
                     "size": 38,
-                    "color": "{% if pollen_sensor %}{{ 'black' if pollen_display < severe_pollen_high else 'accent' }}{% else %}{{ 'accent' if weather_home_hourly[forecast_entity]['forecast'][2].condition in severe_weather else 'black' }}{% endif %}"
+                    "color": "{% if pollen_sensor %}{{ 'black' if pollen_display < severe_pollen_high else 'accent' }}{% else %}{{ 'accent' if next_forecast[-1].is_severe else 'black' }}{% endif %}"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                   {
                     "type": "text",
-                    "value": "{% if pollen_sensor %}{{ pollen_display }}{% if show_temp_unit %}{{ state_attr(pollen_sensor, 'unit_of_measurement') }}{% endif %}{% else %}{{ weather_home_hourly[forecast_entity]['forecast'][2].temperature|round }}{% if show_temp_unit%}{{ state_attr(forecast_entity,'temperature_unit') }}{% else %}°{% endif %}{% endif %}",
+                    "value": "{% if pollen_sensor %}{{ pollen_display }}{% if show_temp_unit %}{{ state_attr(pollen_sensor, 'unit_of_measurement') }}{% endif %}{% else %}{{ next_forecast[-1].temp }}{% if show_temp_unit%}{{ state_attr(forecast_entity,'temperature_unit') }}{% else %}°{% endif %}{% endif %}",
                     "font": "{{ font_file }}",
                     "x": 192,
                     "y": 146,
                     "size": 20,
-                    "color": "{% if pollen_sensor %}{{ 'black' if pollen_display < severe_pollen_high else 'accent' }}{% else %}{{ 'black' if weather_home_hourly[forecast_entity]['forecast'][2].temperature|round > severe_temp_low else 'accent' }}{% endif %}",
+                    "color": "{% if pollen_sensor %}{{ 'black' if pollen_display < severe_pollen_high else 'accent' }}{% else %}{{ 'black' if next_forecast[-1].temp > severe_temp_low else 'accent' }}{% endif %}",
                     "anchor": "mt"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}

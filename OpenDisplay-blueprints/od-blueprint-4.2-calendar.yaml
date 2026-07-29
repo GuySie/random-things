@@ -331,7 +331,7 @@ action:
                   "x": 3,
                   "y": {{ day.header_y }},
                   "size": 22,
-                  "color": "white"
+                  "color": "black"
                 }
                 {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
