@@ -228,7 +228,7 @@ action:
                 {% for i in range(days_shown | int) %}
                   {% set day_date = today_at('00:00') + timedelta(days=i) %}
                   {% set day_key = day_date.strftime('%Y-%m-%d') %}
-                  {% set day_ns = namespace(lines=[], matched=0) %}
+                  {% set day_ns = namespace(raw=[], matched=0) %}
                   {% for event in all_events %}
                     {% if (as_timestamp(event.start) | timestamp_custom('%Y-%m-%d')) == day_key %}
                       {% set day_ns.matched = day_ns.matched + 1 %}
@@ -239,11 +239,11 @@ action:
                         {% set end_label = (as_timestamp(event.end) | timestamp_custom('%-I:%M %p')) if time_format == '12h' else (as_timestamp(event.end) | timestamp_custom('%H:%M')) %}
                         {% set line = start_label ~ '-' ~ end_label ~ ': ' ~ event.summary %}
                       {% endif %}
-                      {% set day_ns.lines = day_ns.lines + [line] %}
+                      {% set day_ns.raw = day_ns.raw + [{'ts': as_timestamp(event.start), 'line': line}] %}
                     {% endif %}
                   {% endfor %}
                   {% set count = day_ns.matched if day_ns.matched > 0 else 1 %}
-                  {% set event_lines = day_ns.lines if day_ns.matched > 0 else [language_map[weekday_lang]['no_events']] %}
+                  {% set event_lines = (day_ns.raw | sort(attribute='ts') | map(attribute='line') | list) if day_ns.matched > 0 else [language_map[weekday_lang]['no_events']] %}
                   {% set sep_y_start = gap_header + i * gap_title + ns.prior * gap_text %}
                   {% set sep_y_end = gap_header + (i + 1) * gap_title + ns.prior * gap_text %}
                   {% set header_y = gap_header + i * gap_title + gap_line + ns.prior * gap_text %}

@@ -1,0 +1,401 @@
+blueprint:
+  name: OpenDisplay Agenda 4.2" - Calendar (v2)
+  description: >
+    # OpenDisplay Agenda Display (4.2")
+
+    An automation that displays a multi-day calendar agenda on a 4.2" 400 x 300 pixel e-paper tags. It shows one block per day with the date and that day's events, with block heights scaling automatically to fit however many days and events you have. Created by Claude for [Guy Sie](https://github.com/guysie), adapted from a calendar automation by [svenove](https://github.com/svenove/OpenEPaperLink-HA-Calendar).
+
+    Developed against the [Solum Newton Pro 4.2" tag](https://www.solum-group.com/esl-n-iot/product-lineup/professional-esl/newton-pro)
+
+    ## Prerequisites
+
+    - [OpenDisplay Integration](https://github.com/OpenDisplay/Home_Assistant_Integration) (v3.0.0-beta.8 or later) must be installed and configured
+
+    - One or more [calendar integrations](https://www.home-assistant.io/integrations/#calendar) must be set up
+
+    - For a nicer font add [`GothamRnd-Bold.ttf`](https://github.com/chunkysteveo/OpenEPaperLink-HA-Weatherman/raw/refs/heads/main/GothamRnd-Bold.ttf)
+
+    - Recommended: trigger this automation on a `time_pattern` schedule every hour, and add your own conditions (e.g. a vacation-mode helper) under the Optional section if you want to pause updates
+
+  domain: automation
+  input:
+    displays:
+      name: E-Paper Display(s)
+      description: What 4.2" BWRY ESLs to display the content on
+      selector:
+        device:
+          multiple: true
+          filter:
+            integration: opendisplay
+    automation_trigger:
+      name: Trigger
+      description: When to trigger the automation
+      selector:
+        trigger:
+    optional:
+      name: Optional
+      icon: "mdi:cog"
+      collapsed: true
+      input:
+        automation_conditions:
+          name: Conditions
+          description: Optional conditions that must be met to run the automation
+          default: []
+          selector:
+            condition:
+        calendar_entities:
+          name: Calendar(s)
+          description: One or more calendar entities to source events from. Events from multiple calendars are merged into a single agenda.
+          default: []
+          selector:
+            entity:
+              multiple: true
+              filter:
+                domain: calendar
+        days_shown:
+          name: Days Shown
+          description: How many days ahead to display, starting today. With many days and/or busy calendars, content may overflow the display's 300px height.
+          default: 6
+          selector:
+            number:
+              min: 1
+              max: 7
+              mode: box
+        header_title:
+          name: Header title
+          description: Text shown at the top-left of the display, in the header bar. Leave blank to use a translated default.
+          default: ""
+          selector:
+            text: {}
+        time_format:
+          name: Time Format
+          description: Choose between 12-hour (AM/PM) or 24-hour format for event times
+          default: "24h"
+          selector:
+            select:
+              options:
+                - label: "12-hour (AM/PM)"
+                  value: "12h"
+                - label: "24-hour"
+                  value: "24h"
+        weekday_format:
+          name: Language
+          description: Language for weekday/month names and interface text
+          default: "en"
+          selector:
+            select:
+              options:
+                - label: "English"
+                  value: "en"
+                - label: "German"
+                  value: "de"
+                - label: "Dutch"
+                  value: "nl"
+                - label: "French"
+                  value: "fr"
+                - label: "Spanish"
+                  value: "es"
+                - label: "Polish"
+                  value: "pl"
+                - label: "Croatian"
+                  value: "hr"
+                - label: "Swedish"
+                  value: "sv"
+        font_file:
+          name: Font file
+          description: "Path to a custom font file (default: ppb.ttf) For a better font, use `GothamRnd-Bold.ttf`"
+          default: ppb.ttf
+          selector:
+            text: {}
+        rotate:
+          name: Rotation
+          description: "Display rotation in degrees."
+          default: "0"
+          selector:
+            select:
+              options:
+                - label: "0"
+                  value: "0"
+                - label: "90"
+                  value: "90"
+                - label: "180"
+                  value: "180"
+                - label: "270"
+                  value: "270"
+
+variables:
+  calendar_entities: !input calendar_entities
+  days_shown: !input days_shown
+  font_file: !input font_file
+  time_format: !input time_format
+  weekday_lang: !input weekday_format
+  header_title: !input header_title
+  gap_header: 26
+  gap_line: 14
+  gap_title: 30
+  gap_text: 24
+  language_map: >
+    {% set map = {
+      "en": {
+        "weekdays": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"],
+        "months": ["January","February","March","April","May","June","July","August","September","October","November","December"],
+        "title": "Agenda",
+        "all_day_prefix": "All day: ",
+        "no_events": "No appointments",
+        "no_calendar": "No calendar entity selected."
+      },
+      "de": {
+        "weekdays": ["Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag"],
+        "months": ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"],
+        "title": "Kalender",
+        "all_day_prefix": "Ganztägig: ",
+        "no_events": "Keine Termine",
+        "no_calendar": "Keine Kalender-Entität ausgewählt."
+      },
+      "nl": {
+        "weekdays": ["Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag","Zondag"],
+        "months": ["Januari","Februari","Maart","April","Mei","Juni","Juli","Augustus","September","Oktober","November","December"],
+        "title": "Agenda",
+        "all_day_prefix": "Hele dag: ",
+        "no_events": "Geen afspraken",
+        "no_calendar": "Geen kalender-entiteit geselecteerd."
+      },
+      "fr": {
+        "weekdays": ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"],
+        "months": ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"],
+        "title": "Agenda",
+        "all_day_prefix": "Toute la journée : ",
+        "no_events": "Aucun rendez-vous",
+        "no_calendar": "Aucune entité de calendrier sélectionnée."
+      },
+      "es": {
+        "weekdays": ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"],
+        "months": ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"],
+        "title": "Agenda",
+        "all_day_prefix": "Todo el día: ",
+        "no_events": "Sin citas",
+        "no_calendar": "No se ha seleccionado ninguna entidad de calendario."
+      },
+      "pl": {
+        "weekdays": ["Poniedziałek","Wtorek","Środa","Czwartek","Piątek","Sobota","Niedziela"],
+        "months": ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec","Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"],
+        "title": "Kalendarz",
+        "all_day_prefix": "Cały dzień: ",
+        "no_events": "Brak wydarzeń",
+        "no_calendar": "Nie wybrano encji kalendarza."
+      },
+      "hr": {
+        "weekdays": ["Ponedjeljak","Utorak","Srijeda","Četvrtak","Petak","Subota","Nedjelja"],
+        "months": ["Siječanj","Veljača","Ožujak","Travanj","Svibanj","Lipanj","Srpanj","Kolovoz","Rujan","Listopad","Studeni","Prosinac"],
+        "title": "Kalendar",
+        "all_day_prefix": "Cijeli dan: ",
+        "no_events": "Nema događaja",
+        "no_calendar": "Nije odabran entitet kalendara."
+      },
+      "sv": {
+        "weekdays": ["Måndag","Tisdag","Onsdag","Torsdag","Fredag","Lördag","Söndag"],
+        "months": ["Januari","Februari","Mars","April","Maj","Juni","Juli","Augusti","September","Oktober","November","December"],
+        "title": "Kalender",
+        "all_day_prefix": "Heldag: ",
+        "no_events": "Inga händelser",
+        "no_calendar": "Ingen kalenderentitet vald."
+      }
+    } %}
+    {{ map }}
+  header_title_display: >-
+    {{ header_title if header_title else language_map[weekday_lang]['title'] }}
+  weekday_short_map: >
+    {% set map = {
+      "en": ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
+      "de": ["Mo","Di","Mi","Do","Fr","Sa","So"],
+      "nl": ["Ma","Di","Wo","Do","Vr","Za","Zo"],
+      "fr": ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"],
+      "es": ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"],
+      "pl": ["Pon","Wt","Śr","Czw","Pt","Sob","Nie"],
+      "hr": ["Pon","Uto","Sri","Čet","Pet","Sub","Ned"],
+      "sv": ["Mån","Tis","Ons","Tor","Fre","Lör","Sön"]
+    } %}
+    {{ map }}
+  months_short_map: >
+    {% set map = {
+      "en": ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],
+      "de": ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"],
+      "nl": ["Jan","Feb","Mrt","Apr","Mei","Jun","Jul","Aug","Sep","Okt","Nov","Dec"],
+      "fr": ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"],
+      "es": ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"],
+      "pl": ["Sty","Lut","Mar","Kwi","Maj","Cze","Lip","Sie","Wrz","Paź","Lis","Gru"],
+      "hr": ["Sij","Velj","Ožu","Tra","Svi","Lip","Srp","Kol","Ruj","Lis","Stu","Pro"],
+      "sv": ["Jan","Feb","Mar","Apr","Maj","Jun","Jul","Aug","Sep","Okt","Nov","Dec"]
+    } %}
+    {{ map }}
+  updated_text: >-
+    {% set time_str = as_timestamp(now()) | timestamp_custom('%-I:%M %p') if time_format == '12h' else as_timestamp(now()) | timestamp_custom('%H:%M') %}
+    {{ weekday_short_map[weekday_lang][now().weekday()] }} {{ now().day }} {{ months_short_map[weekday_lang][now().month - 1] }}, {{ time_str }}
+
+trigger: !input automation_trigger
+conditions: !input automation_conditions
+
+action:
+  - choose:
+      - conditions:
+          - "{{ calendar_entities | count > 0 }}"
+        sequence:
+          - action: calendar.get_events
+            target:
+              entity_id: "{{ calendar_entities }}"
+            data:
+              start_date_time: "{{ today_at('00:00') }}"
+              end_date_time: "{{ today_at('00:00') + timedelta(days=days_shown) }}"
+            response_variable: cal_events
+          - variables:
+              all_events: >
+                {{ (cal_events.values() | map(attribute='events') | list | sum(start=[])) | sort(attribute='start') }}
+              days: >
+                {% set ns = namespace(list=[], prior=0) %}
+                {% for i in range(days_shown | int) %}
+                  {% set day_date = today_at('00:00') + timedelta(days=i) %}
+                  {% set day_key = day_date.strftime('%Y-%m-%d') %}
+                  {% set day_ns = namespace(raw=[], matched=0) %}
+                  {% for event in all_events %}
+                    {% if (as_timestamp(event.start) | timestamp_custom('%Y-%m-%d')) == day_key %}
+                      {% set day_ns.matched = day_ns.matched + 1 %}
+                      {% if (as_timestamp(event.start) | timestamp_custom('%H:%M')) == '00:00' %}
+                        {% set line = language_map[weekday_lang]['all_day_prefix'] ~ event.summary %}
+                      {% else %}
+                        {% set start_label = (as_timestamp(event.start) | timestamp_custom('%-I:%M %p')) if time_format == '12h' else (as_timestamp(event.start) | timestamp_custom('%H:%M')) %}
+                        {% set end_label = (as_timestamp(event.end) | timestamp_custom('%-I:%M %p')) if time_format == '12h' else (as_timestamp(event.end) | timestamp_custom('%H:%M')) %}
+                        {% set line = start_label ~ '-' ~ end_label ~ ': ' ~ event.summary %}
+                      {% endif %}
+                      {% set day_ns.raw = day_ns.raw + [{'ts': as_timestamp(event.start), 'line': line}] %}
+                    {% endif %}
+                  {% endfor %}
+                  {% set count = day_ns.matched if day_ns.matched > 0 else 1 %}
+                  {% set event_lines = (day_ns.raw | sort(attribute='ts') | map(attribute='line') | list) if day_ns.matched > 0 else [language_map[weekday_lang]['no_events']] %}
+                  {% set sep_y_start = gap_header + i * gap_title + ns.prior * gap_text %}
+                  {% set sep_y_end = gap_header + (i + 1) * gap_title + ns.prior * gap_text %}
+                  {% set header_y = gap_header + i * gap_title + gap_line + ns.prior * gap_text %}
+                  {% set multiline_y = sep_y_end + (gap_text // 2) %}
+                  {% set ns.list = ns.list + [{
+                    'weekday': language_map[weekday_lang]['weekdays'][day_date.weekday()],
+                    'day_num': day_date.day,
+                    'month': language_map[weekday_lang]['months'][day_date.month - 1],
+                    'is_today': i == 0,
+                    'sep_y_start': sep_y_start,
+                    'sep_y_end': sep_y_end,
+                    'header_y': header_y,
+                    'multiline_y': multiline_y,
+                    'event_lines': event_lines
+                  }] %}
+                  {% set ns.prior = ns.prior + count %}
+                {% endfor %}
+                {{ ns.list }}
+          - action: opendisplay.drawcustom
+            target:
+              device_id: !input displays
+            data:
+              background: white
+              rotate: !input rotate
+              payload: >
+                [
+                {% set ns_out = namespace(first=true) %}
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "rectangle",
+                  "x_start": 0,
+                  "x_end": 400,
+                  "y_start": 0,
+                  "y_end": {{ gap_header }},
+                  "width": 0,
+                  "fill": "black",
+                  "outline": "black"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "icon",
+                  "value": "mdi:calendar",
+                  "x": 2,
+                  "y": 1,
+                  "size": 24,
+                  "color": "white"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ header_title_display | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 28,
+                  "y": 13,
+                  "size": 18,
+                  "color": "white",
+                  "anchor": "lm"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ updated_text | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 396,
+                  "y": 13,
+                  "size": 12,
+                  "color": "white",
+                  "anchor": "rm"
+                }
+                {% for day in days %}
+                {% if not loop.first %}
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "line",
+                  "x_start": 0,
+                  "x_end": 400,
+                  "y_start": {{ day.sep_y_start }},
+                  "y_end": {{ day.sep_y_start }},
+                  "fill": "black"
+                }
+                {% endif %}
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ (day.weekday ~ ' ' ~ day.day_num ~ ' ' ~ day.month) | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 14,
+                  "y": {{ day.header_y }},
+                  "size": 20,
+                  "color": "{{ 'accent' if day.is_today else 'black' }}",
+                  "anchor": "lm"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "multiline",
+                  "value": {{ day.event_lines | join('§') | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 14,
+                  "y": {{ day.multiline_y }},
+                  "offset_y": 24,
+                  "delimiter": "§",
+                  "size": 16,
+                  "color": "black"
+                }
+                {% endfor %}
+                ]
+    default:
+      - action: opendisplay.drawcustom
+        target:
+          device_id: !input displays
+        data:
+          background: white
+          rotate: !input rotate
+          payload: >
+            [
+              {
+              "type": "text",
+              "value": {{ language_map[weekday_lang]['no_calendar'] | tojson }},
+              "font": "{{ font_file }}",
+              "x": "50%",
+              "y": "50%",
+              "size": 24,
+              "color": "red",
+              "anchor": "mm",
+              "max_width": 340
+              }
+            ]
+mode: single

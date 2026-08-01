@@ -16,10 +16,11 @@ author's (chunkysteveo) original Weatherman design.
 
 **Header-bar dashboard layout** — `od-blueprint-3.5-appointment.yaml`,
 `od-blueprint-3.5-claude-usage.yaml`, `od-blueprint-3.5-rain-forecast.yaml`,
-`od-blueprint-4.2-calendar.yaml`, `od-blueprint-4.2-plant-moisture.yaml`. All
-originally authored by Claude/Guy Sie. Every one opens the payload with a
-title bar component (see below). `od-blueprint-3.5-weather.yaml` straddles
-both: it has the header bar but otherwise behaves like the icon-first family.
+`od-blueprint-4.2-calendar.yaml`, `od-blueprint-4.2-calendar-v2.yaml`,
+`od-blueprint-4.2-plant-moisture.yaml`. All originally authored by
+Claude/Guy Sie. Every one opens the payload with a title bar component (see
+below). `od-blueprint-3.5-weather.yaml` straddles both: it has the header bar
+but otherwise behaves like the icon-first family.
 
 New blueprints should default to the header-bar archetype unless there's a
 specific reason to go full-bleed (e.g. a single glanceable value meant to be
@@ -68,8 +69,13 @@ Rules:
 
 - **Edge margin**: 14px is the norm on 3.5" canvases. Dense grids (plant
   moisture) tighten this to 5px to fit more columns.
-- **Header bar height**: 26px standard; scales up (45–50px) when the header
-  carries a larger icon/title (e.g. the 4.2" calendar).
+- **Header bar height**: 26px standard, regardless of canvas size — icon
+  24px, title 18pt, meta 12pt (see Header bar component below). Used by every
+  current header-bar blueprint, including the 4.2" `plant-moisture` and
+  `calendar-v2`. `od-blueprint-4.2-calendar.yaml` (v1) is a legacy outlier
+  that scales the bar to 45px with a 43pt title — don't copy that into new
+  blueprints; `calendar-v2` exists specifically to replace it with the
+  standard bar.
 - **Positioning units**: absolute pixel coordinates for all real content.
   Percent-based positioning (`"x": "50%"`) is reserved *only* for the
   canvas-size-agnostic error fallback text — it's the one payload element that
@@ -92,8 +98,23 @@ Full-width filled black rectangle, drawn first in the payload:
 { "type": "text", "value": "<meta, e.g. updated_text>", "font": "{{ font_file }}", "x": <canvas_width - 4>, "y": 13, "size": 12, "color": "white", "anchor": "rm" }
 ```
 Icon at 24px leaves the title starting at `x=28` (2px icon inset + 24px icon +
-2px gap). Meta text (timestamp, week number, etc.) is right-aligned in the
-same bar.
+2px gap). Meta text (a last-updated timestamp) is right-aligned in the same
+bar.
+
+### Timestamp / meta text
+The header bar's right-aligned meta text is a last-updated timestamp built
+from a `weekday_short_map` / `months_short_map` pair — abbreviated
+weekday/month name arrays, keyed by the same 8 language codes as
+`language_map`, but kept as separate sibling variables rather than nested
+inside it (see `od-blueprint-3.5-appointment.yaml`):
+```jinja
+{% set time_str = as_timestamp(now()) | timestamp_custom('%-I:%M %p') if time_format == '12h' else as_timestamp(now()) | timestamp_custom('%H:%M') %}
+{{ weekday_short_map[weekday_lang][now().weekday()] }} {{ now().day }} {{ months_short_map[weekday_lang][now().month - 1] }}, {{ time_str }}
+```
+Renders e.g. `Fri 1 Aug, 18:39`. Used by `appointment`, `claude-usage`,
+`rain-forecast`, `plant-moisture`, and `calendar-v2`. `od-blueprint-4.2-calendar.yaml`
+(v1) instead shows a raw ISO week number (`W31`) with no weekday/date — a
+legacy deviation, not a pattern to copy.
 
 ### Threshold coloring
 The single most consistent idea in the repo: a value is compared against a
@@ -121,7 +142,10 @@ These aren't layout, but they're as much a "system" as the pixels:
 - **`language_map`**: an identical-shaped Jinja dict per blueprint keyed by
   the 8 supported language codes, holding weekday/month names and every
   user-facing string. Copy the shape exactly when adding a blueprint —
-  don't invent a different i18n structure.
+  don't invent a different i18n structure. Paired with the separate
+  `weekday_short_map`/`months_short_map` dicts for the header timestamp (see
+  Timestamp / meta text above) — don't fold those abbreviations into
+  `language_map` itself.
 - **Day/night condition-icon maps**: the same `day_conditions_map` /
   `night_conditions_map` MDI lookup tables are copy-pasted verbatim into
   every blueprint that renders weather conditions.

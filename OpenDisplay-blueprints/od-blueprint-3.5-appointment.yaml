@@ -261,7 +261,12 @@ action:
               events_data: >
                 {% set now_ts = now().timestamp() %}
                 {% set today_date = now().date() %}
-                {% set all_events = (cal_events.values() | map(attribute='events') | list | sum(start=[])) | selectattr('start', 'search', ':') | list | sort(attribute='start') %}
+                {% set unsorted_events = (cal_events.values() | map(attribute='events') | list | sum(start=[])) | selectattr('start', 'search', ':') | list %}
+                {% set tagged = namespace(list=[]) %}
+                {% for e in unsorted_events %}
+                  {% set tagged.list = tagged.list + [{'ts': as_timestamp(e.start), 'event': e}] %}
+                {% endfor %}
+                {% set all_events = tagged.list | sort(attribute='ts') | map(attribute='event') | list %}
                 {% set ns = namespace(list=[]) %}
                 {% for e in all_events %}
                   {% if (ns.list | count) < 2 and as_timestamp(e.end) > now_ts %}
