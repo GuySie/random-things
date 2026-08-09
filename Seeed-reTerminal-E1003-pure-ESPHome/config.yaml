@@ -1,0 +1,914 @@
+####################################################
+## Seeed reTerminal E1003 Art Display (pure ESPHome)
+##
+## Configuration to use a Seeed reTerminal E1003 e-ink display as a digital art frame.
+## The display wakes on a configurable schedule, loads a random image, displays it, and
+## immediately returns to deep sleep. By default, recently shown images are tracked so
+## the same image won't repeat until roughly half the collection has cycled through.
+## This can be toggled off from Home Assistant for pure random selection.
+##
+## This version uses ESPHome's official `it8951` display component (added in ESPHome
+## 2026.7.0) instead of a custom external_component driver. See CLAUDE.md in this folder
+## for the differences between this and the sibling Seeed-reTerminal-E1003/ configuration.
+##
+## HOW TO USE
+##
+## PREPARATION
+## 01. Set substitutions. Replace api_key, ota_password, and ap_password with real
+##     values — don't leave the FILL_IN_* placeholders.
+## 02. Set substitution rotation to 0 for landscape mode, or 270 for portrait mode.
+## 03. Create a helper boolean in Home Assistant to control whether this frame goes into
+##     deep sleep. The default entity name is input_boolean.reterminal_deep_sleep — if
+##     you create a helper with that name you can skip changing substitution ha_deep_sleep.
+## 04. Optionally change substitution ha_www_url to the publicly accessible URL of your www
+##     folder, with trailing slash. The default should work for most people.
+##     For more information, check:
+##     https://www.home-assistant.io/integrations/http/#hosting-files
+## 05. Optionally set substitution max_images to the maximum number of images you want to use in
+##     the future without having to update this configuration again.
+## 06. Optionally adjust substitution deep_sleep_run — a safety timeout: the device
+##     normally returns to deep sleep immediately after displaying an image, but this
+##     caps the maximum awake time in case something goes wrong.
+## 07. Upload your PNG images to a subfolder of your www folder (you will set the folder
+##     name in step 14). Number them sequentially: 1.png, 2.png, etc. No gaps — the
+##     configuration assumes a continuous set of sequentially ascending numbered files.
+##     Images must be:
+##     - In PNG format
+##     - 1404x1872 pixels for portrait (rotation: 270), or 1872x1404 for landscape
+##     - 16-level grayscale (the IT8951 controller renders 4bpp grayscale)
+##
+## INSTALLATION
+## 08. Set your deep sleep helper boolean to off, so you can configure the display
+##     after installation.
+## 09. Keep image_history.h in the same folder as this yaml — required for compilation.
+## 10. Install this configuration onto your Seeed reTerminal E1003 display.
+## 11. Add the display to Home Assistant after it has been discovered.
+## 12. In the display's ESPHome settings, turn on "Allow the device to perform Home
+##     Assistant actions."
+## 13. In Home Assistant, set the "Total Images" number of this ESPHome device to the
+##     highest numbered image you have uploaded. Update this if you add more images.
+## 14. In the display's ESPHome settings, configure the following (no reflashing needed):
+##     - "Refresh Interval" — how often (in whole hours) to wake, aligned to clock
+##       boundaries (e.g. 1 = every hour at :00, 6 = at 00:00/06:00/12:00/18:00)
+##     - "Active Hours Start" / "Active Hours End" — window during which refreshes are
+##       allowed; wakeups outside this window are skipped to the next boundary inside.
+##       Set start to 0 and end to 23 to run continuously around the clock.
+##     - "Album Folder" — subfolder within your www folder where images are stored;
+##       no trailing slash needed, leave empty if images are in the www folder directly.
+##
+## USAGE
+## 15. Set your deep sleep helper boolean to on. Every time the display wakes, it will
+##     load and display a random image, then immediately return to deep sleep.
+## 16. You can also control deep sleep directly from the display's ESPHome settings.
+## 17. Press the green button to wake the display out of deep sleep (and load a random
+##     image).
+## 18. While awake, press the white buttons on top of the display to step forward/
+##     backward through your images sequentially.
+## 19. While awake, use the buttons in the display's ESPHome settings to go to the
+##     next, previous, or a random image.
+## 20. While awake, set the "Current Image" number of this device in Home Assistant
+##     to jump to that specific numbered image.
+## 21. Turn on the Audio Feedback toggle in the display's ESPHome settings to get
+##     buzzer sounds when performing actions.
+## 22. The Image History switch in the display's ESPHome settings controls random
+##     selection mode: on (default) avoids recently shown images; off picks freely.
+##
+## By Guy Sie (https://github.com/guysie)
+##
+####################################################
+
+substitutions:
+  name: reterminal-e1003
+  friendly_name: "Seeed reTerminal E1003"
+  project_name: "Guy Sie.reTerminal E1003 Art Display"
+  project_version: "1.0.0"
+  api_key: "FILL_IN_API_KEY"
+  ota_password: "FILL_IN_OTA_PASSWORD"
+  ap_password: "FILL_IN_AP_PASSWORD"
+  rotation: 0
+  ha_deep_sleep: "input_boolean.reterminal_deep_sleep"
+
+# Sane defaults that should work for most people
+  wifi_ssid: !secret wifi_ssid
+  wifi_password: !secret wifi_password
+  ha_www_url: "http://homeassistant.local:8123/local/"
+  max_images: 1000
+  deep_sleep_run: "90s"
+
+####################################################
+
+esphome:
+  min_version: 2026.7.0
+  name: ${name}
+  friendly_name: ${friendly_name}
+  project:
+    name: ${project_name}
+    version: ${project_version}
+  includes:
+    - image_history.h
+    - <driver/rtc_io.h>
+  on_boot:
+# Release all GPIO latches from deep sleep
+    - priority: 900
+      then:
+        - lambda: |-
+            gpio_hold_dis(GPIO_NUM_11);
+            gpio_hold_dis(GPIO_NUM_21);
+            gpio_hold_dis(GPIO_NUM_16);
+            gpio_hold_dis(GPIO_NUM_38);
+            gpio_hold_dis(GPIO_NUM_39);
+            gpio_hold_dis(GPIO_NUM_45);
+            gpio_hold_dis(GPIO_NUM_48);
+# Enable battery voltage measurement and record boot time from RTC
+    - priority: 600
+      then:
+        - output.turn_on: bsp_battery_enable
+        - component.update: last_boot_sensor
+# Override the it8951 display's temperature before its own setup() runs.
+# The it8951 component only ever sends SET_TEMP once, during its own internal async
+# init sequence (Phase::INIT_TEMP), and there's no public API to re-send it afterward —
+# so this can't use the normal sht4x sensor (its component.update: sht40_sensor is
+# itself async, via a set_timeout deferred callback that only fires once loop() starts,
+# by which point it8951's setup() has already run). Instead this does a raw synchronous
+# I2C read of the SHT40 (address 0x44), matching the ESPHome sht4x component's own wire
+# protocol (0xFD high-precision command, 10ms conversion delay, standard SHT4x formula)
+# so the value matches what that sensor would report. Because this whole read is
+# synchronous and this handler's priority (550) is higher than it8951's PROCESSOR
+# priority (400), it is *guaranteed* to complete and return before it8951's setup() is
+# even called — this isn't a timing race, it's priority-ordered. See CLAUDE.md "Port
+# notes" for the full reasoning and background on why the async approach doesn't work.
+    - priority: 550
+      then:
+        - lambda: |-
+            uint8_t cmd = 0xFD;  // SHT4x high-precision measurement command
+            if (id(i2c0).write(0x44, &cmd, 1, true) == i2c::ERROR_OK) {
+              delay(10);  // conversion time, matches sht4x component's own timeout
+              uint8_t data[6];
+              if (id(i2c0).read(0x44, data, 6) == i2c::ERROR_OK) {
+                uint16_t raw_t = ((uint16_t)data[0] << 8) | data[1];
+                float temp_c = -45.0f + 175.0f * ((float)raw_t / 65535.0f);
+                id(epaper_display).set_force_temperature((int)temp_c);
+                id(last_temp_override) = temp_c;
+                ESP_LOGD("temp_override", "set_force_temperature(%d) [%.2f C, sync I2C] at %u ms",
+                         (int)temp_c, temp_c, (unsigned)millis());
+              } else {
+                ESP_LOGW("temp_override", "SHT40 read failed; it8951 will use its configured default");
+              }
+            } else {
+              ESP_LOGW("temp_override", "SHT40 measurement command failed; it8951 will use its configured default");
+            }
+  on_shutdown:
+# Disable battery voltage divider before deep sleep
+    - priority: 200
+      then:
+        - output.turn_off: bsp_battery_enable
+# Compute clock-aligned sleep duration from RTC just before entering deep sleep
+    - priority: 100
+      then:
+        - lambda: |-
+            int interval_h   = (int)id(rtc_interval_hours).state;
+            int active_start = (int)id(rtc_hour_start).state;
+            int active_end   = (int)id(rtc_hour_end).state;
+
+            auto t = id(rtc_time).now();
+            if (!t.is_valid()) {
+              id(deep_sleep_1).set_sleep_duration((uint32_t)interval_h * 3600000UL);
+              ESP_LOGW("rtc_sleep", "RTC not set, sleeping %d h", interval_h);
+              return;
+            }
+
+            int now_secs      = t.hour * 3600 + t.minute * 60 + t.second;
+            int interval_secs = interval_h * 3600;
+
+            // Next clock-aligned boundary (always at least 1 full interval from now)
+            int next_secs = ((now_secs / interval_secs) + 1) * interval_secs;
+
+            // Advance past quiet hours (cap at 48 iterations)
+            for (int i = 0; i < 48; i++) {
+              int h = (next_secs / 3600) % 24;
+              if (h >= active_start && h <= active_end) break;
+              next_secs += interval_secs;
+            }
+
+            uint32_t sleep_ms = (uint32_t)(next_secs - now_secs) * 1000UL;
+            id(deep_sleep_1).set_sleep_duration(sleep_ms);
+            ESP_LOGI("rtc_sleep", "Next wake in %u s at hour %d",
+                     (next_secs - now_secs), (next_secs / 3600) % 24);
+# Latch GPIO states before deep sleep to prevent SD card and touch controller from drawing power during deep sleep
+    - priority: 50
+      then:
+        - lambda: |-
+            ESP_LOGI("power", "BEFORE - IO21:%d IO11:%d IO38:%d IO45:%d IO16:%d IO39:%d IO48:%d",
+              digitalRead(21), digitalRead(11), digitalRead(38), digitalRead(45),
+              digitalRead(16), digitalRead(39), digitalRead(48));
+
+            // Disable I2C pins — community-confirmed leakage path on GPIO19
+            gpio_set_direction(GPIO_NUM_19, GPIO_MODE_DISABLE);
+            gpio_set_direction(GPIO_NUM_20, GPIO_MODE_DISABLE);
+
+            // RTC-capable pins (<=GPIO21): held via RTC domain
+            // NOTE: GPIO11/21 are also the it8951 display's enable_pin list (EPD_Drive_EN /
+            // ITE_VCC_EN). Driving them LOW + holding here right before deep sleep is safe
+            // and correct regardless of what state the display component itself left them
+            // in (its `sleep_when_done: false` model default leaves them HIGH after a
+            // refresh) — this unconditional cutoff is what actually matters for the
+            // deep-sleep power floor. See CLAUDE.md "Port notes" for the full reasoning.
+            pinMode(11, OUTPUT); digitalWrite(11, LOW); gpio_hold_en(GPIO_NUM_11);
+            pinMode(21, OUTPUT); digitalWrite(21, LOW); gpio_hold_en(GPIO_NUM_21);
+
+            // Non-RTC pins (>GPIO21): require gpio_deep_sleep_hold_en()
+            // GPIO16 (USER_LED) excluded — latching it LOW drives LED on via Q4 transistor
+            pinMode(38, OUTPUT); digitalWrite(38, LOW); gpio_hold_en(GPIO_NUM_38);
+            pinMode(39, OUTPUT); digitalWrite(39, LOW); gpio_hold_en(GPIO_NUM_39);
+            pinMode(45, OUTPUT); digitalWrite(45, LOW); gpio_hold_en(GPIO_NUM_45);
+            pinMode(48, OUTPUT); digitalWrite(48, LOW); gpio_hold_en(GPIO_NUM_48);
+
+            // Arm digital hold domain for non-RTC pins (38/39/45/48)
+            gpio_deep_sleep_hold_en();
+
+            // Keep RTC_PERIPH powered for ext1 monitoring; pull-up GPIO3 (green button)
+            esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+            rtc_gpio_pullup_en(GPIO_NUM_3);
+            rtc_gpio_pulldown_dis(GPIO_NUM_3);
+
+            ESP_LOGI("power", "AFTER  - IO21:%d IO11:%d IO38:%d IO39:%d IO48:%d",
+              digitalRead(21), digitalRead(11), digitalRead(38),
+              digitalRead(39), digitalRead(48));
+
+# Enable logging
+# GPIO19/20 are the ESP32-S3's native USB D-/D+ pins, but on this board they're
+# wired to I2C0 (RTC/SHT40/charger) instead; the CH340 console runs over UART0.
+# ESPHome's ESP32-S3 default (USB_SERIAL_JTAG) would otherwise bring up the
+# unused internal USB PHY on those same I2C pins for no reason.
+logger:
+  hardware_uart: UART0
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: ${api_key}
+
+ota:
+  - platform: esphome
+    password: ${ota_password}
+
+wifi:
+  ssid: ${wifi_ssid}
+  password: ${wifi_password}
+  fast_connect: true
+# Device waits for successful wifi connection (specifically, after initial boot and after waking from deep sleep) to update to a new random image
+# Side effect: will also trigger on wifi reconnection if device has poor reception
+# NOTE: the component.update: sht40_sensor call here is now vestigial for display
+# purposes — the effective temperature read for the it8951 driver is the new
+# priority-550 on_boot handler above, which runs long before wifi connects. This call
+# is left in place because it's harmless (keeps the HA-exposed reading fresh) and
+# because it still matters for reasons unrelated to the display (e.g. it re-triggers
+# on wifi reconnects during an already-awake session). See CLAUDE.md "Port notes".
+  on_connect:
+    - script.execute: check_charger
+    - component.update: sht40_sensor
+    - component.update: battery_voltage
+    - button.press: random_image
+# Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Seeed-Reterminal"
+    password: ${ap_password}
+
+captive_portal:
+
+http_request:
+  buffer_size_rx: 32768
+
+## Deep sleep configuration
+# Comment out to disable deep sleep. This lets you use the green button as a control instead
+deep_sleep:
+  id: deep_sleep_1
+  run_duration: ${deep_sleep_run}
+# sleep_duration is computed dynamically from RTC just before deep sleep (see on_shutdown lambda above)
+# Green button interrupts deep sleep
+# ext1 required because gpio_deep_sleep_hold_en() (applied before deep sleep) breaks ext0
+  esp32_ext1_wakeup:
+    pins:
+      - number: GPIO3
+    mode: ANY_LOW
+
+
+## Holds the value read by the priority-550 on_boot temperature override (see CLAUDE.md
+## "Port notes" #1) so it can be logged again later, after wifi/API are up and an OTA log
+## viewer would actually have a chance to see it — the override itself already happened
+## at boot regardless of whether anyone is watching.
+globals:
+  - id: last_temp_override
+    type: float
+    restore_value: false
+    initial_value: "0.0"
+
+## Hardware configuration (ESP, buttons, sensors, buzzer, LED)
+esp32:
+  board: esp32-s3-devkitc-1
+  cpu_frequency: 160MHZ
+  framework:
+    type: arduino
+
+psram:
+  mode: octal
+
+## SPI bus for the IT8951 e-paper controller (shared with the unused SD card slot, CS=GPIO14).
+## miso_pin is mandatory for the it8951 component — it reads DevInfo/VCOM/LUT-busy state
+## back from the controller over MISO, unlike typical write-only e-paper SPI drivers.
+spi:
+  clk_pin: GPIO7
+  mosi_pin: GPIO9
+  miso_pin: GPIO8
+
+i2c:
+  id: i2c0
+  sda: GPIO19
+  scl: GPIO20
+
+time:
+  - platform: pcf8563
+    id: rtc_time
+    address: 0x51
+    i2c_id: i2c0
+    update_interval: never
+
+  - platform: homeassistant
+    id: ha_time
+    on_time_sync:
+      then:
+        - pcf8563.write_time:
+            id: rtc_time
+
+## USB charger detection (SY6974B PMIC, I2C0 address 0x6B, register 0x0A bit 7 = BUS_GD)
+script:
+  - id: check_charger
+    then:
+      - lambda: |-
+          uint8_t reg = 0x0A;
+          uint8_t data = 0;
+          bool connected = false;
+          if (id(i2c0).write(0x6B, &reg, 1, false) == i2c::ERROR_OK &&
+              id(i2c0).read(0x6B, &data, 1) == i2c::ERROR_OK) {
+            connected = (data & 0x80) != 0;
+          }
+          id(charger_connected).publish_state(connected);
+
+# Re-check while awake so unplugging is noticed without waiting for the next scheduled wake
+interval:
+  - interval: 15s
+    then:
+      - script.execute: check_charger
+
+binary_sensor:
+# Left white button (back)
+  - platform: gpio
+    pin:
+      number: GPIO5
+      mode: INPUT_PULLUP
+      inverted: true
+    id: button_1
+    name: "Button Left"
+    disabled_by_default: true
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 20ms
+              - light.turn_off: buzzer
+# If currently displayed image is the first one in the folder, don't go further back
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state == 1;'
+            then:
+              - logger.log: "Image counter already at minimum image count"
+            else:
+              - number.decrement:
+                  id: image_counter
+                  cycle: false
+
+# Right white button (forward)
+  - platform: gpio
+    pin:
+      number: GPIO4
+      mode: INPUT_PULLUP
+      inverted: true
+    id: button_2
+    name: "Button Right"
+    disabled_by_default: true
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 20ms
+              - light.turn_off: buzzer
+# If currently displayed image is the last one in the folder, don't go further forward
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state == id(total_images).state;'
+            then:
+              - logger.log: "Image counter already at total image count"
+            else:
+              - number.increment:
+                  id: image_counter
+                  cycle: false
+
+## Green button (random)
+# Uncomment to use green button for random image. You must disable deep sleep to do so.
+#  - platform: gpio
+#    pin:
+#      number: GPIO3
+#      mode: INPUT_PULLUP
+#      inverted: true
+#    id: button_3
+#    name: "Button Green"
+#    disabled_by_default: true
+#    on_press:
+#      then:
+#        - number.set:
+#            id: image_counter
+#            value: !lambda |-
+#              uint32_t random_value = esp_random();
+#              return (random_value % (int)id(total_images).state) + 1;
+#        - if:
+#            condition:
+#              lambda: 'return (id(audiofeedback).state);'
+#            then:
+#              - light.turn_on:
+#                  id: buzzer
+#                  brightness: 25%
+#              - delay: 20ms
+#              - light.turn_off: buzzer
+
+## USB charger presence, read from the SY6974B battery PMIC over I2C0 (address 0x6B).
+## REG0A bit 7 (BUS_GD) is set whenever a cable is physically attached to VBUS, ahead of
+## any input-source qualification. State is refreshed by the check_charger script (see
+## `script:`), not by a lambda here, so the I2C bus isn't polled on every main loop tick.
+  - platform: template
+    name: "Charger Connected"
+    id: charger_connected
+    device_class: plug
+    icon: mdi:power-plug
+# Charger plugged in: hold off automatic (run_duration-triggered) deep sleep for as long as it stays connected.
+# Does not affect the explicit deep_sleep.enter calls in online_image's callbacks — those are gated separately.
+    on_press:
+      - deep_sleep.prevent: deep_sleep_1
+# Charger removed: resume normal sleep behavior, but only if HA hasn't separately disabled deep sleep.
+    on_release:
+      - if:
+          condition:
+            lambda: 'return id(allow_deepsleep).state;'
+          then:
+            - deep_sleep.allow: deep_sleep_1
+
+sensor:
+# SHT40 temperature sensor. This is now vestigial — kept only for parity with the
+# source repo's entity layout (internal: true, same as before, so no new HA entity is
+# introduced by this port). It no longer feeds the it8951 display's temperature
+# override: that's done via a raw synchronous I2C read in the priority-550 on_boot
+# handler above (see CLAUDE.md "Port notes" #1), since this component's own
+# component.update:/on_value path is asynchronous (a set_timeout deferred callback that
+# only fires once loop() starts, by which point it8951's one-shot temperature init has
+# already run). Safe to remove if you don't need it for anything else.
+  - platform: sht4x
+    id: sht40_sensor
+    temperature:
+      name: "Temperature"
+      id: sht40_temperature
+      internal: true
+    update_interval: never
+
+# Battery voltage and Battery level sensor configuration
+  - platform: adc
+    pin: GPIO1
+    name: "Battery Voltage"
+    id: battery_voltage
+    internal: true
+    update_interval: 60s
+    attenuation: 12db
+    samples: 8
+    filters:
+# Compensate for voltage divider
+      - multiply: 2.0
+    on_value:
+      - component.update: battery_level
+  - platform: template
+    name: "Battery Level"
+    id: battery_level
+    entity_category: diagnostic
+    unit_of_measurement: "%"
+    icon: "mdi:battery"
+    device_class: battery
+    state_class: measurement
+    lambda: 'return id(battery_voltage).state;'
+    update_interval: never
+    filters:
+      - calibrate_linear:
+          - 4.15 -> 100.0
+          - 3.96 -> 90.0
+          - 3.91 -> 80.0
+          - 3.85 -> 70.0
+          - 3.80 -> 60.0
+          - 3.75 -> 50.0
+          - 3.68 -> 40.0
+          - 3.58 -> 30.0
+          - 3.49 -> 20.0
+          - 3.41 -> 10.0
+          - 3.30 -> 5.0
+          - 3.27 -> 0.0
+      - clamp:
+          min_value: 0
+          max_value: 100
+
+text_sensor:
+  - platform: template
+    name: "Last Boot"
+    id: last_boot_sensor
+    entity_category: diagnostic
+    disabled_by_default: true
+    device_class: timestamp
+    update_interval: never
+    lambda: |-
+      auto t = id(rtc_time).now();
+      if (!t.is_valid()) return {};
+      char buf[30];
+      time_t ts = t.timestamp;
+      struct tm *gmt = gmtime(&ts);
+      strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S+00:00", gmt);
+      return std::string(buf);
+
+output:
+# Green side LED GPIO configuration
+  - platform: gpio
+    pin: GPIO16
+    id: led_output
+    inverted: true
+# Battery voltage measurement GPIO configuration
+  - platform: gpio
+    pin: GPIO40
+    id: bsp_battery_enable
+# Buzzer configuration (to control the buzzer pwm, pretend it's an LED light)
+  - platform: ledc
+    pin: GPIO45
+    id: buzzer_pwm
+# The frequency determines the pitch of the buzzer's sound
+    frequency: 2700Hz
+
+light:
+# Expose green side LED to Home Assistant
+  - platform: binary
+    name: "Onboard LED"
+    output: led_output
+    id: onboard_led
+    icon: mdi:led-outline
+    disabled_by_default: true
+# Create a fake light entity to control the buzzer. The 'brightness' of the light controls the buzzer's volume
+  - platform: monochromatic
+    output: buzzer_pwm
+    name: "Buzzer"
+    id: buzzer
+    icon: mdi:volume-high
+    disabled_by_default: true
+    default_transition_length: 0s
+
+
+## E-ink display configuration (display)
+## Uses ESPHome's official it8951 component (2026.7.0+). The seeed-reterminal-e1003
+## model preset supplies the correct pins, vcom, vcom_register, force_temperature, and
+## mirror_x defaults for this exact board — see CLAUDE.md "Port notes" for how these
+## were verified against this board's schematic/CLAUDE.md hardware facts.
+## full_update_every: 1 forces every single refresh to be a full-panel, non-partial
+## GC16 pass — the closest equivalent achievable via this component's YAML actions to
+## the old custom driver's "always full, never partial" anti-ghosting design (a literal
+## two-pass INIT-then-GC16 sequence isn't achievable: the component coalesces back-to-
+## back it8951.update calls and a second call finds no dirty region to redraw). See
+## CLAUDE.md for the full reasoning.
+display:
+  - platform: it8951
+    id: epaper_display
+    model: seeed-reterminal-e1003
+    update_interval: never
+    full_update_every: 1
+    rotation: ${rotation}
+    lambda: |-
+      it.image(0, 0, id(onlineimage));
+
+
+## Image variables configuration
+number:
+# Total number of images in the folder; must match highest number filename in the folder
+  - platform: template
+    name: "Total Images"
+    id: total_images
+    icon: mdi:camera-burst
+    entity_category: config
+    min_value: 1
+    max_value: ${max_images}
+    step: 1
+    restore_value: true
+    initial_value: 10
+    optimistic: true
+    mode: box
+# Current image being displayed
+  - platform: template
+    name: "Current Image"
+    id: image_counter
+    icon: mdi:image-frame
+    min_value: 1
+    max_value: ${max_images}
+    step: 1
+    restore_value: true
+    initial_value: 1
+    optimistic: true
+    mode: box
+    on_value:
+      then:
+# If current image is set to a file that can not exist, instead set to the highest-numbered file that can exist
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state > id(total_images).state;'
+            then:
+              - number.set:
+                  id: image_counter
+                  value: !lambda 'return id(total_images).state;'
+            else:
+# URL of image to display is always updated here, this causes online_image to start downloading
+              - online_image.set_url:
+                  id: onlineimage
+                  url: !lambda |-
+                    char urlstring[254];
+                    std::string folder = id(album_folder_text).state;
+                    if (!folder.empty() && folder.back() != '/') folder += '/';
+                    sprintf(urlstring, "${ha_www_url}%s%d.png", folder.c_str(), (int)id(image_counter).state);
+                    return (urlstring);
+
+
+# Deep sleep schedule configuration
+  - platform: template
+    name: "Refresh Interval"
+    id: rtc_interval_hours
+    icon: mdi:clock-outline
+    entity_category: config
+    unit_of_measurement: "h"
+    min_value: 1
+    max_value: 24
+    step: 1
+    restore_value: true
+    initial_value: 1
+    optimistic: true
+    mode: box
+  - platform: template
+    name: "Active Hours Start"
+    id: rtc_hour_start
+    icon: mdi:weather-sunset-up
+    entity_category: config
+    unit_of_measurement: "h"
+    min_value: 0
+    max_value: 23
+    step: 1
+    restore_value: true
+    initial_value: 7
+    optimistic: true
+    mode: box
+  - platform: template
+    name: "Active Hours End"
+    id: rtc_hour_end
+    icon: mdi:weather-sunset-down
+    entity_category: config
+    unit_of_measurement: "h"
+    min_value: 0
+    max_value: 23
+    step: 1
+    restore_value: true
+    initial_value: 23
+    optimistic: true
+    mode: box
+
+
+## Online image configuration
+image:
+  - platform: online_image
+    url: https://placehold.co/10x10/white/white/png
+    id: onlineimage
+    type: GRAYSCALE
+    format: png
+# Display component is always updated here once online_image has finished downloading.
+# it8951.update (rather than component.update) is used so we control the refresh mode
+# explicitly — see the display: block comment above for why mode: GC16 + full_update_every: 1
+# together are the chosen replacement for the old driver's INIT-then-GC16 double refresh.
+    on_download_finished:
+      - it8951.update:
+          id: epaper_display
+          mode: GC16
+      - lambda: |-
+          g_history[g_hist_head] = (int)id(image_counter).state;
+          g_hist_head = (g_hist_head + 1) % 50;
+          if (g_hist_count < 50) g_hist_count++;
+          ESP_LOGI("img_history", "Added image %d to history (count=%d)",
+                   (int)id(image_counter).state, (int)g_hist_count);
+# Re-log the boot-time temperature override here (well after wifi/API are up, unlike the
+# on_boot debug log — see CLAUDE.md "Port notes" #1) purely so it's actually visible over
+# OTA logs. This doesn't affect the override itself, which already happened at boot.
+      - logger.log:
+          tag: temp_override
+          format: "Temperature used for this boot's it8951 init: %.2f C"
+          args: ["id(last_temp_override)"]
+      - if:
+          condition:
+            lambda: 'return id(allow_deepsleep).state && !id(charger_connected).state;'
+          then:
+            - deep_sleep.enter: deep_sleep_1
+    on_error:
+      - logger.log:
+          level: WARN
+          format: "Failed to download image %d"
+          args: ["(int)id(image_counter).state"]
+      - if:
+          condition:
+            lambda: 'return id(allow_deepsleep).state && !id(charger_connected).state;'
+          then:
+            - deep_sleep.enter: deep_sleep_1
+
+
+## Text configuration
+text:
+# Subfolder within Home Assistant's /local/ folder where images are stored; no trailing slash needed
+  - platform: template
+    name: "Album Folder"
+    id: album_folder_text
+    icon: mdi:folder-image
+    mode: text
+    restore_value: true
+    initial_value: ""
+    optimistic: true
+    max_length: 64
+    entity_category: config
+
+
+## Switch configuration
+switch:
+# Expose switch to let user turn on/off button feedback sounds
+  - platform: template
+    name: "Audio Feedback"
+    id: audiofeedback
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+# Toggle between history-aware random selection (avoids recent images) and pure random
+  - platform: template
+    name: "Image History"
+    id: use_image_history
+    icon: mdi:history
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+# Deep sleep behavior linked to input boolean in Home Assistant
+  - platform: homeassistant
+    id: allow_deepsleep
+    name: "HA Deep sleep"
+    entity_id: ${ha_deep_sleep}
+    on_turn_on:
+      - deep_sleep.allow: deep_sleep_1
+      - switch.turn_on: allow_deepsleep_toggle
+    on_turn_off:
+      - deep_sleep.prevent: deep_sleep_1
+      - switch.turn_off: allow_deepsleep_toggle
+# Expose switch to let user toggle the deep sleep input boolean from the device
+# For this to work, the option "Allow the device to perform Home Assistant actions" must have been enabled
+  - platform: template
+    name: "Deep Sleep Toggle"
+    id: allow_deepsleep_toggle
+    optimistic: true
+    entity_category: config
+    on_turn_on:
+      - homeassistant.action:
+          action: input_boolean.turn_on
+          data:
+            entity_id: ${ha_deep_sleep}
+    on_turn_off:
+      - homeassistant.action:
+          action: input_boolean.turn_off
+          data:
+            entity_id: ${ha_deep_sleep}
+# Restart
+  - platform: restart
+    name: "Device Restart"
+    entity_category: config
+
+button:
+  - platform: template
+    name: "Random Image"
+    id: random_image
+    icon: "mdi:slot-machine"
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 20ms
+              - light.turn_off: buzzer
+        - lambda: |-
+            int total = (int)id(total_images).state;
+            int candidate = -1;
+
+            if (total <= 1) {
+              candidate = 1;
+            } else if (!id(use_image_history).state) {
+              // Pure random: pick any image with no history restriction
+              candidate = (esp_random() % total) + 1;
+            } else {
+              // History-aware: avoid images in the recent window
+              // Window: floor(total/2), capped at 50, never >= total (always >= 1 free slot)
+              int hist_window = total / 2;
+              if (hist_window > 50) hist_window = 50;
+              if (hist_window >= total) hist_window = (total > 1) ? (total - 1) : 0;
+
+              // Try up to 200 random picks to find one not in the recent window
+              int check = ((int)g_hist_count < hist_window) ? (int)g_hist_count : hist_window;
+              for (int attempt = 0; attempt < 200 && candidate == -1; attempt++) {
+                int r = (esp_random() % total) + 1;
+                bool recent = false;
+                for (int i = 0; i < check; i++) {
+                  int idx = ((int)g_hist_head - 1 - i + 50) % 50;
+                  if (g_history[idx] == r) { recent = true; break; }
+                }
+                if (!recent) candidate = r;
+              }
+
+              // Fallback: pick the oldest entry in the window that is still a valid image number
+              if (candidate == -1 && g_hist_count > 0) {
+                int check2 = ((int)g_hist_count < hist_window) ? (int)g_hist_count : hist_window;
+                for (int i = check2 - 1; i >= 0 && candidate == -1; i--) {
+                  int idx = ((int)g_hist_head - 1 - i + 50) % 50;
+                  int img = g_history[idx];
+                  if (img >= 1 && img <= total) candidate = img;
+                }
+              }
+              if (candidate == -1) candidate = 1;
+            }
+
+            id(image_counter).make_call().set_value(candidate).perform();
+  - platform: template
+    name: "Previous Image"
+    id: previous_image
+    icon: "mdi:skip-previous"
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 20ms
+              - light.turn_off: buzzer
+# If currently displayed image is the first one in the folder, don't go further back
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state == 1;'
+            then:
+              - logger.log: "Image counter already at minimum image count"
+            else:
+              - number.decrement:
+                  id: image_counter
+                  cycle: false
+  - platform: template
+    name: "Next Image"
+    id: next_image
+    icon: "mdi:skip-next"
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return (id(audiofeedback).state);'
+            then:
+              - light.turn_on:
+                  id: buzzer
+                  brightness: 25%
+              - delay: 20ms
+              - light.turn_off: buzzer
+# If currently displayed image is the last one in the folder, don't go further forward
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state == id(total_images).state;'
+            then:
+              - logger.log: "Image counter already at total image count"
+            else:
+              - number.increment:
+                  id: image_counter
+                  cycle: false
