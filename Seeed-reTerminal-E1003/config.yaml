@@ -77,7 +77,7 @@ substitutions:
   name: reterminal-e1003
   friendly_name: "Seeed reTerminal E1003"
   project_name: "Guy Sie.reTerminal E1003 Art Display"
-  project_version: "0.9.0"
+  project_version: "1.0.0"
   api_key: "FILL_IN_API_KEY"
   ota_password: "FILL_IN_OTA_PASSWORD"
   ap_password: "FILL_IN_AP_PASSWORD"
@@ -193,7 +193,12 @@ esphome:
               digitalRead(39), digitalRead(48));
 
 # Enable logging
+# GPIO19/20 are the ESP32-S3's native USB D-/D+ pins, but on this board they're
+# wired to I2C0 (RTC/SHT40/charger) instead; the CH340 console runs over UART0.
+# ESPHome's ESP32-S3 default (USB_SERIAL_JTAG) would otherwise bring up the
+# unused internal USB PHY on those same I2C pins for no reason.
 logger:
+  hardware_uart: UART0
 
 # Enable Home Assistant API
 api:
@@ -211,6 +216,7 @@ wifi:
 # Device waits for successful wifi connection (specifically, after initial boot and after waking from deep sleep) to update to a new random image
 # Side effect: will also trigger on wifi reconnection if device has poor reception
   on_connect:
+    - script.execute: check_charger
     - component.update: sht40_sensor
     - component.update: battery_voltage
     - button.press: random_image
@@ -272,6 +278,26 @@ time:
       then:
         - pcf8563.write_time:
             id: rtc_time
+
+## USB charger detection (SY6974B PMIC, I2C0 address 0x6B, register 0x0A bit 7 = BUS_GD)
+script:
+  - id: check_charger
+    then:
+      - lambda: |-
+          uint8_t reg = 0x0A;
+          uint8_t data = 0;
+          bool connected = false;
+          if (id(i2c0).write(0x6B, &reg, 1, false) == i2c::ERROR_OK &&
+              id(i2c0).read(0x6B, &data, 1) == i2c::ERROR_OK) {
+            connected = (data & 0x80) != 0;
+          }
+          id(charger_connected).publish_state(connected);
+
+# Re-check while awake so unplugging is noticed without waiting for the next scheduled wake
+interval:
+  - interval: 15s
+    then:
+      - script.execute: check_charger
 
 binary_sensor:
 # Left white button (back)
@@ -363,6 +389,27 @@ binary_sensor:
 #              - delay: 20ms
 #              - light.turn_off: buzzer
 
+## USB charger presence, read from the SY6974B battery PMIC over I2C0 (address 0x6B).
+## REG0A bit 7 (BUS_GD) is set whenever a cable is physically attached to VBUS, ahead of
+## any input-source qualification. State is refreshed by the check_charger script (see
+## `script:`), not by a lambda here, so the I2C bus isn't polled on every main loop tick.
+  - platform: template
+    name: "Charger Connected"
+    id: charger_connected
+    device_class: plug
+    icon: mdi:power-plug
+# Charger plugged in: hold off automatic (run_duration-triggered) deep sleep for as long as it stays connected.
+# Does not affect the explicit deep_sleep.enter calls in online_image's callbacks — those are gated separately.
+    on_press:
+      - deep_sleep.prevent: deep_sleep_1
+# Charger removed: resume normal sleep behavior, but only if HA hasn't separately disabled deep sleep.
+    on_release:
+      - if:
+          condition:
+            lambda: 'return id(allow_deepsleep).state;'
+          then:
+            - deep_sleep.allow: deep_sleep_1
+
 sensor:
 # SHT40 temperature sensor; read once per wake cycle just before display refresh via component.update: sht40_sensor in wifi.on_connect
   - platform: sht4x
@@ -383,6 +430,7 @@ sensor:
     internal: true
     update_interval: 60s
     attenuation: 12db
+    samples: 8
     filters:
 # Compensate for voltage divider
       - multiply: 2.0
@@ -588,7 +636,7 @@ online_image:
                    (int)id(image_counter).state, (int)g_hist_count);
       - if:
           condition:
-            lambda: 'return id(allow_deepsleep).state;'
+            lambda: 'return id(allow_deepsleep).state && !id(charger_connected).state;'
           then:
             - deep_sleep.enter: deep_sleep_1
     on_error:
@@ -598,7 +646,7 @@ online_image:
           args: ["(int)id(image_counter).state"]
       - if:
           condition:
-            lambda: 'return id(allow_deepsleep).state;'
+            lambda: 'return id(allow_deepsleep).state && !id(charger_connected).state;'
           then:
             - deep_sleep.enter: deep_sleep_1
 

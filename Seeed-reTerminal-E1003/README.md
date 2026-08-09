@@ -2,6 +2,10 @@
 
 ESPHome configuration for using a [Seeed reTerminal E1003](https://www.seeedstudio.com/reTerminal-E1003-frame-bundle.html) epaper display as a digital art frame with Home Assistant. Combining the high DPI (1872x1404px resolution) with 16 tints grayscale, this display can convincingly emulate the look of a black and white photography print.
 
+This configuration used a custom component that is no longer needed, as ESPHome now supports the IT8951 controller directly. I've made a [new version of this configuration](https://github.com/GuySie/random-things/tree/main/Seeed-reTerminal-E1003-pure-ESPHome) that does not require you to install a custom component.
+
+This version of the configuration will remain online for reference purposes.
+
 The display wakes from deep sleep on a configurable schedule, loads a random image from a configurable folder in your Home Assistant local www folder, displays it, and immediately returns to deep sleep. By default, recent images are tracked across sleep cycles so the same image is not shown again until roughly half the collection has cycled through — this can be toggled off from Home Assistant to pick images with no restriction. The white buttons on the device step through images sequentially while awake; the green button wakes the display early and loads a random image once wifi connects.
 
 The refresh schedule — how often to wake and during which hours — and the image folder are all configured directly from Home Assistant without reflashing.
@@ -22,7 +26,7 @@ Number images sequentially with no gaps: `1.png`, `2.png`, `3.png`, etc.
 
 ## IT8951 component
 
-ESPHome currently does not provide support for the IT8951 controller used in the E1003, so we provide a local component. This component is a modification of the [code by koosoli](https://github.com/esphome/esphome/pull/15415), modified using Claude Code to work specifically for this art frame purpose. No guarantees it will work for anything else.
+When we made this configuration, ESPHome did not provide support for the IT8951 controller used in the E1003, so we provide a local component. This component is a modification of the [code by koosoli](https://github.com/esphome/esphome/pull/15415), modified using Claude Code to work specifically for this art frame purpose. No guarantees it will work for anything else.
 
 ## Deep sleep optimization
 
