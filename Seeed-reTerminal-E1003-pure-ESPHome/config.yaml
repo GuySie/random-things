@@ -259,15 +259,8 @@ wifi:
   fast_connect: true
 # Device waits for successful wifi connection (specifically, after initial boot and after waking from deep sleep) to update to a new random image
 # Side effect: will also trigger on wifi reconnection if device has poor reception
-# NOTE: the component.update: sht40_sensor call here is now vestigial for display
-# purposes — the effective temperature read for the it8951 driver is the new
-# priority-550 on_boot handler above, which runs long before wifi connects. This call
-# is left in place because it's harmless (keeps the HA-exposed reading fresh) and
-# because it still matters for reasons unrelated to the display (e.g. it re-triggers
-# on wifi reconnects during an already-awake session). See CLAUDE.md "Port notes".
   on_connect:
     - script.execute: check_charger
-    - component.update: sht40_sensor
     - component.update: battery_voltage
     - button.press: random_image
 # Enable fallback hotspot (captive portal) in case wifi connection fails
@@ -303,6 +296,14 @@ globals:
     type: float
     restore_value: false
     initial_value: "0.0"
+## Counts consecutive download failures for the *current* image selection, reset to 0
+## whenever a new image is requested (image_counter's on_value) — not on success or
+## failure — so a retry always reflects attempts at the same image, not a running total
+## across the whole awake session. See online_image's on_error below.
+  - id: download_retry_count
+    type: int
+    restore_value: false
+    initial_value: "0"
 
 ## Hardware configuration (ESP, buttons, sensors, buzzer, LED)
 esp32:
@@ -354,6 +355,19 @@ script:
             connected = (data & 0x80) != 0;
           }
           id(charger_connected).publish_state(connected);
+# Builds the current image URL and starts (or restarts) its download. Shared between
+# image_counter's on_value (new image selected) and online_image's on_error (retry of
+# the same image) so the URL-building logic only lives in one place.
+  - id: refresh_image_url
+    then:
+      - online_image.set_url:
+          id: onlineimage
+          url: !lambda |-
+            char urlstring[254];
+            std::string folder = id(album_folder_text).state;
+            if (!folder.empty() && folder.back() != '/') folder += '/';
+            sprintf(urlstring, "${ha_www_url}%s%d.png", folder.c_str(), (int)id(image_counter).state);
+            return (urlstring);
 
 # Re-check while awake so unplugging is noticed without waiting for the next scheduled wake
 interval:
@@ -473,22 +487,6 @@ binary_sensor:
             - deep_sleep.allow: deep_sleep_1
 
 sensor:
-# SHT40 temperature sensor. This is now vestigial — kept only for parity with the
-# source repo's entity layout (internal: true, same as before, so no new HA entity is
-# introduced by this port). It no longer feeds the it8951 display's temperature
-# override: that's done via a raw synchronous I2C read in the priority-550 on_boot
-# handler above (see CLAUDE.md "Port notes" #1), since this component's own
-# component.update:/on_value path is asynchronous (a set_timeout deferred callback that
-# only fires once loop() starts, by which point it8951's one-shot temperature init has
-# already run). Safe to remove if you don't need it for anything else.
-  - platform: sht4x
-    id: sht40_sensor
-    temperature:
-      name: "Temperature"
-      id: sht40_temperature
-      internal: true
-    update_interval: never
-
 # Battery voltage and Battery level sensor configuration
   - platform: adc
     pin: GPIO1
@@ -530,6 +528,21 @@ sensor:
       - clamp:
           min_value: 0
           max_value: 100
+# NOT a live/ambient temperature reading — this is the value read once at boot and fed
+# into the it8951 display's one-shot temperature init (see CLAUDE.md "Port notes" #1).
+# It reflects whatever the room was like when the device last woke up and refreshed,
+# not the current temperature.
+  - platform: template
+    name: "Last Refresh Temperature"
+    id: last_refresh_temperature
+    entity_category: diagnostic
+    icon: "mdi:thermometer"
+    device_class: temperature
+    unit_of_measurement: "°C"
+    state_class: measurement
+    accuracy_decimals: 1
+    lambda: 'return id(last_temp_override);'
+    update_interval: never
 
 text_sensor:
   - platform: template
@@ -643,15 +656,11 @@ number:
                   id: image_counter
                   value: !lambda 'return id(total_images).state;'
             else:
-# URL of image to display is always updated here, this causes online_image to start downloading
-              - online_image.set_url:
-                  id: onlineimage
-                  url: !lambda |-
-                    char urlstring[254];
-                    std::string folder = id(album_folder_text).state;
-                    if (!folder.empty() && folder.back() != '/') folder += '/';
-                    sprintf(urlstring, "${ha_www_url}%s%d.png", folder.c_str(), (int)id(image_counter).state);
-                    return (urlstring);
+# A new image is being requested — reset the retry counter (see globals: above) so
+# online_image's on_error gets a fresh retry attempt for this image, then start the
+# download via the shared refresh_image_url script (see script: above).
+              - lambda: 'id(download_retry_count) = 0;'
+              - script.execute: refresh_image_url
 
 
 # Deep sleep schedule configuration
@@ -719,26 +728,45 @@ image:
                    (int)id(image_counter).state, (int)g_hist_count);
 # Re-log the boot-time temperature override here (well after wifi/API are up, unlike the
 # on_boot debug log — see CLAUDE.md "Port notes" #1) purely so it's actually visible over
-# OTA logs. This doesn't affect the override itself, which already happened at boot.
+# OTA logs, and publish it to HA as a diagnostic sensor for lasting history. Neither of
+# these affects the override itself, which already happened at boot.
       - logger.log:
           tag: temp_override
           format: "Temperature used for this boot's it8951 init: %.2f C"
           args: ["id(last_temp_override)"]
+      - component.update: last_refresh_temperature
       - if:
           condition:
             lambda: 'return id(allow_deepsleep).state && !id(charger_connected).state;'
           then:
             - deep_sleep.enter: deep_sleep_1
+# Retry once before giving up — a single transient wifi/DNS/HA hiccup would otherwise
+# waste the whole wake cycle (no image update, straight back to sleep until the next
+# scheduled wake, possibly hours away). download_retry_count is reset to 0 whenever a
+# new image is requested (see number: "Current Image" on_value above), so this always
+# reflects attempts at the current image, not a running total for the awake session.
     on_error:
-      - logger.log:
-          level: WARN
-          format: "Failed to download image %d"
-          args: ["(int)id(image_counter).state"]
       - if:
           condition:
-            lambda: 'return id(allow_deepsleep).state && !id(charger_connected).state;'
+            lambda: 'return id(download_retry_count) < 1;'
           then:
-            - deep_sleep.enter: deep_sleep_1
+            - logger.log:
+                level: WARN
+                format: "Failed to download image %d, retrying once"
+                args: ["(int)id(image_counter).state"]
+            - lambda: 'id(download_retry_count) += 1;'
+            - delay: 2s
+            - script.execute: refresh_image_url
+          else:
+            - logger.log:
+                level: WARN
+                format: "Failed to download image %d after retry, giving up"
+                args: ["(int)id(image_counter).state"]
+            - if:
+                condition:
+                  lambda: 'return id(allow_deepsleep).state && !id(charger_connected).state;'
+                then:
+                  - deep_sleep.enter: deep_sleep_1
 
 
 ## Text configuration
