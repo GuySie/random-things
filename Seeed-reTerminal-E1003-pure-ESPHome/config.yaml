@@ -258,7 +258,11 @@ wifi:
   password: ${wifi_password}
   fast_connect: true
 # Device waits for successful wifi connection (specifically, after initial boot and after waking from deep sleep) to update to a new random image
-# Side effect: will also trigger on wifi reconnection if device has poor reception
+# NOTE: on_connect fires on every IP acquisition, not just once per wake — including a
+# mid-session reconnect after a dropout (common on a weak-signal wall mount). The
+# image_picked_this_wake guard below (see globals: and CLAUDE.md) keeps the actual image
+# pick to once per wake regardless; check_charger/battery_voltage/temp-publish are left
+# unguarded since re-running them on a reconnect is harmless (same or freshly-read values).
   on_connect:
     - script.execute: check_charger
     - component.update: battery_voltage
@@ -278,7 +282,14 @@ wifi:
         format: "Temperature used for this boot's it8951 init: %.2f C"
         args: ["id(last_temp_override)"]
     - component.update: last_refresh_temperature
-    - button.press: random_image
+# Only the first connection per wake should pick a new image — see the
+# image_picked_this_wake global comment above for why this guard exists.
+    - if:
+        condition:
+          lambda: 'return !id(image_picked_this_wake);'
+        then:
+          - lambda: 'id(image_picked_this_wake) = true;'
+          - button.press: random_image
 # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
     ssid: "Seeed-Reterminal"
@@ -320,6 +331,16 @@ globals:
     type: int
     restore_value: false
     initial_value: "0"
+## Guards button.press: random_image in wifi.on_connect so only the first successful
+## connection per wake picks a new image. wifi.on_connect fires on every IP acquisition,
+## not just once per wake — including a mid-session reconnect after a dropout, which is
+## common on a weak-signal wall mount. Without this guard, each reconnect would pick and
+## download a second, unrelated random image in the same wake (confirmed via the "Current
+## Image" HA history graph showing two distinct values seconds apart). See CLAUDE.md.
+  - id: image_picked_this_wake
+    type: bool
+    restore_value: false
+    initial_value: "false"
 
 ## Hardware configuration (ESP, buttons, sensors, buzzer, LED)
 esp32:
