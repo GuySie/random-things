@@ -262,6 +262,22 @@ wifi:
   on_connect:
     - script.execute: check_charger
     - component.update: battery_voltage
+# Published here, not at on_download_finished, because the value is already fully
+# determined at boot (see on_boot priority-550 handler above) and doesn't depend on the
+# download outcome at all. Publishing it this early — right when wifi/API first come up,
+# same as battery_voltage above — gives the API packet time to actually transmit before
+# any deep_sleep.enter call. Publishing it right before deep_sleep.enter (the previous
+# design) meant that on battery power (no USB charger to block the guarded deep_sleep.enter
+# in on_download_finished/on_error), the radio could power down before the just-queued
+# state packet left the device, so the sensor silently stopped updating in HA. This wasn't
+# visible during bench testing because a connected charger disables that guarded
+# deep_sleep.enter entirely, leaving the device awake indefinitely regardless. See
+# CLAUDE.md "Port notes" #1 for the full history of this sensor.
+    - logger.log:
+        tag: temp_override
+        format: "Temperature used for this boot's it8951 init: %.2f C"
+        args: ["id(last_temp_override)"]
+    - component.update: last_refresh_temperature
     - button.press: random_image
 # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
@@ -726,15 +742,6 @@ image:
           if (g_hist_count < 50) g_hist_count++;
           ESP_LOGI("img_history", "Added image %d to history (count=%d)",
                    (int)id(image_counter).state, (int)g_hist_count);
-# Re-log the boot-time temperature override here (well after wifi/API are up, unlike the
-# on_boot debug log — see CLAUDE.md "Port notes" #1) purely so it's actually visible over
-# OTA logs, and publish it to HA as a diagnostic sensor for lasting history. Neither of
-# these affects the override itself, which already happened at boot.
-      - logger.log:
-          tag: temp_override
-          format: "Temperature used for this boot's it8951 init: %.2f C"
-          args: ["id(last_temp_override)"]
-      - component.update: last_refresh_temperature
       - if:
           condition:
             lambda: 'return id(allow_deepsleep).state && !id(charger_connected).state;'
