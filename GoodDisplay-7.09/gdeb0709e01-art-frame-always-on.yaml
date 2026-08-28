@@ -1,0 +1,478 @@
+####################################################
+## GDEB0709E01 Art Display — Always-On (mains-powered)
+##
+## For the Good Display GDEB0709E01 (7.09" Spectra 6) on its ESP32-133C02 driver
+## board (rev2: 3 onboard buttons), run permanently on USB/mains power with no
+## battery. The display stays awake and connected at all times; on a configurable
+## schedule it loads a random image and shows it. By default, recently shown images
+## are tracked so the same image won't repeat until roughly half the collection has
+## cycled through. This can be toggled off from Home Assistant for pure random
+## selection.
+##
+## Original ESPHome component by Philipp Waller:
+## https://github.com/philippwaller/esphome-epaper-spectra6-133
+##
+## HOW TO USE
+##
+## PREPARATION
+## 01. Set substitutions. Replace api_key, ota_password, and ap_password with real
+##     values — don't leave the FILL_IN_* placeholders.
+## 02. Set substitution rotation to 0 for portrait mode (native), or 90 for landscape mode.
+## 03. Optionally change substitution ha_www_url to the publicly accessible URL of your www
+##     folder, with trailing slash. The default should work for most people.
+##     For more information, check:
+##     https://www.home-assistant.io/integrations/http/#hosting-files
+## 04. Optionally set substitution max_images to the maximum number of images you want to use in
+##     the future without having to update this configuration again.
+## 05. Upload your PNG images to a subfolder of your www folder (you will set the folder
+##     name in step 11). Number them sequentially: 1.png, 2.png, etc. No gaps — the
+##     configuration assumes a continuous set of sequentially ascending numbered files.
+##     Images must be:
+##     - In PNG format
+##     - 1200x1600 pixels for portrait (rotation: 0), or 1600x1200 for landscape
+##       (rotation: 90)
+##     - Dithered to the 6-color E Ink Spectra 6 palette
+##
+## INSTALLATION
+## 06. Keep image_history.h and the components folder in the same folder as this yaml —
+##     both are required for compilation.
+## 07. Install this configuration onto your GDEB0709E01 / ESP32-133C02 board.
+## 08. Add the display to Home Assistant after it has been discovered.
+## 09. In the display's ESPHome settings, turn on "Allow the device to perform Home
+##     Assistant actions."
+## 10. In Home Assistant, set the "Total Images" number of this ESPHome device to the
+##     highest numbered image you have uploaded. Update this if you add more images.
+## 11. In the display's ESPHome settings, configure the following (no reflashing needed):
+##     - "Refresh Interval" — how often (in whole hours) to load a new random image,
+##       aligned to clock boundaries (e.g. 1 = every hour at :00, 6 = at
+##       00:00/06:00/12:00/18:00)
+##     - "Active Hours Start" / "Active Hours End" — window during which scheduled
+##       refreshes are allowed; boundaries outside this window are skipped to the
+##       next boundary inside. Set start to 0 and end to 23 to refresh continuously
+##       around the clock.
+##     - "Album Folder" — subfolder within your www folder where images are stored;
+##       no trailing slash needed, leave empty if images are in the www folder directly.
+##
+## USAGE
+## 12. Once powered on and connected, the display loads a random image immediately,
+##     then loads a new one automatically at each scheduled boundary from step 11.
+## 13. Press any of the 3 onboard buttons at any time. Left/right step
+##     backward/forward through your images sequentially; the third loads a new
+##     random image immediately.
+## 14. Use the buttons in the display's ESPHome settings to go to the next,
+##     previous, or a random image.
+## 15. Set the "Current Image" number of this device in Home Assistant to jump to
+##     that specific numbered image.
+## 16. The Image History switch in the display's ESPHome settings controls random
+##     selection mode: on (default) avoids recently shown images; off picks freely.
+##
+## Original by Guy Sie (https://github.com/guysie)
+####################################################
+
+substitutions:
+  name: gdeb0709e01-art-frame-always-on
+  friendly_name: "GDEB0709E01 Art Display (Always On)"
+  project_name: "Guy Sie.GDEB0709E01 Art Display Always On"
+  project_version: "0.1.0"
+  api_key: "FILL_IN_API_KEY"
+  ota_password: "FILL_IN_OTA_PASSWORD"
+  ap_password: "FILL_IN_AP_PASSWORD"
+  rotation: 0
+
+# Sane defaults that should work for most people
+  wifi_ssid: !secret wifi_ssid
+  wifi_password: !secret wifi_password
+  ha_www_url: "http://homeassistant.local:8123/local/"
+  max_images: 1000
+
+####################################################
+
+esphome:
+  min_version: "2026.2.0"
+  name: ${name}
+  friendly_name: ${friendly_name}
+  project:
+    name: ${project_name}
+    version: ${project_version}
+  platformio_options:
+    board_build.psram: enabled
+  includes:
+    - image_history.h
+  on_boot:
+    - priority: 600
+      then:
+        - component.update: last_boot_sensor
+
+# The board's programming/debug connector uses UART0.
+logger:
+  hardware_uart: UART0
+
+api:
+  encryption:
+    key: ${api_key}
+
+ota:
+  - platform: esphome
+    password: ${ota_password}
+
+wifi:
+  ssid: ${wifi_ssid}
+  password: ${wifi_password}
+  fast_connect: true
+# Loads a random image on boot and on every reconnect, then syncs time from HA.
+  on_connect:
+    - button.press: random_image
+  ap:
+    ssid: "GDEB0709E01"
+    password: ${ap_password}
+
+captive_portal:
+
+http_request:
+  buffer_size_rx: 32768
+
+esp32:
+  board: esp32-s3-devkitc-1
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+
+psram:
+  mode: octal
+  speed: 80MHz
+  ignore_not_found: false
+
+external_components:
+  - source:
+      type: local
+      path: components
+
+time:
+  - platform: homeassistant
+    id: ha_time
+
+globals:
+  - id: g_last_fired_hour
+    type: int
+    restore_value: false
+    initial_value: '-1'
+
+## Scheduled refresh — replaces the deep-sleep wake schedule. Checks HA time every
+## 30s and presses the Random Image button once per clock-aligned boundary (e.g.
+## interval_h = 6 fires at 00:00/06:00/12:00/18:00), same math as the deep-sleeping
+## version's on_shutdown lambda, but without ever sleeping. g_last_fired_hour stops
+## it firing more than once within the same matching hour.
+interval:
+  - interval: 30s
+    then:
+      - lambda: |-
+          int interval_h   = (int)id(rtc_interval_hours).state;
+          int active_start = (int)id(rtc_hour_start).state;
+          int active_end   = (int)id(rtc_hour_end).state;
+
+          auto t = id(ha_time).now();
+          if (!t.is_valid()) return;
+          if (t.minute != 0) return;
+          if (t.hour == id(g_last_fired_hour)) return;
+          if (interval_h <= 0 || (t.hour % interval_h) != 0) return;
+          if (t.hour < active_start || t.hour > active_end) return;
+
+          id(g_last_fired_hour) = t.hour;
+          ESP_LOGI("ha_schedule", "Scheduled refresh at hour %d", t.hour);
+          id(random_image).press();
+
+text_sensor:
+  - platform: template
+    name: "Last Boot"
+    id: last_boot_sensor
+    entity_category: diagnostic
+    disabled_by_default: true
+    device_class: timestamp
+    update_interval: never
+    lambda: |-
+      auto t = id(ha_time).now();
+      if (!t.is_valid()) return {};
+      char buf[30];
+      time_t ts = t.timestamp;
+      struct tm *gmt = gmtime(&ts);
+      strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S+00:00", gmt);
+      return std::string(buf);
+
+## Physical buttons — confirmed rev2 board (3 onboard buttons, GPIO12/13/14). No
+## deep sleep on this variant, so these are plain GPIO inputs — no EXT1 wake
+## duty, no `allow_other_uses`. Confirmed on real hardware these are active-HIGH
+## (idle low, pressed high) — no `inverted:` here.
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO12
+    id: button_previous
+    name: "Button Previous"
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state == 1;'
+            then:
+              - logger.log: "Image counter already at minimum image count"
+            else:
+              - number.decrement:
+                  id: image_counter
+                  cycle: false
+  - platform: gpio
+    pin:
+      number: GPIO13
+    id: button_next
+    name: "Button Next"
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state == id(total_images).state;'
+            then:
+              - logger.log: "Image counter already at total image count"
+            else:
+              - number.increment:
+                  id: image_counter
+                  cycle: false
+  - platform: gpio
+    pin:
+      number: GPIO14
+    id: button_random
+    name: "Button Random"
+    on_press:
+      then:
+        - button.press: random_image
+
+## E-ink display configuration
+# Pins confirmed against Good Display's own reference firmware and the community
+# component's board package — see ../reference/esphome-t133a01-driver/NOTES.md
+display:
+  - platform: epaper_spectra6_133
+    id: epaper_display
+    update_interval: never
+    auto_clear_enabled: false
+    rotation: ${rotation}
+    cs0_pin: 18
+    cs1_pin: 17
+    clk_pin: 9
+    data0_pin: 41
+    data1_pin: 40
+    busy_pin: 7
+    reset_pin: 6
+    power_pin: 45
+    change_detection_mode: track
+    refresh_mode: full
+    clear_color: white
+    lambda: |-
+      it.image(0, 0, id(onlineimage));
+
+## Image variables configuration
+number:
+  - platform: template
+    name: "Total Images"
+    id: total_images
+    icon: mdi:camera-burst
+    entity_category: config
+    min_value: 1
+    max_value: ${max_images}
+    step: 1
+    restore_value: true
+    initial_value: 10
+    optimistic: true
+    mode: box
+  - platform: template
+    name: "Current Image"
+    id: image_counter
+    icon: mdi:image-frame
+    min_value: 1
+    max_value: ${max_images}
+    step: 1
+    restore_value: true
+    initial_value: 1
+    optimistic: true
+    mode: box
+    on_value:
+      then:
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state > id(total_images).state;'
+            then:
+              - number.set:
+                  id: image_counter
+                  value: !lambda 'return id(total_images).state;'
+            else:
+              - online_image.set_url:
+                  id: onlineimage
+                  url: !lambda |-
+                    char urlstring[254];
+                    std::string folder = id(album_folder_text).state;
+                    if (!folder.empty() && folder.back() != '/') folder += '/';
+                    sprintf(urlstring, "${ha_www_url}%s%d.png", folder.c_str(), (int)id(image_counter).state);
+                    return (urlstring);
+
+  - platform: template
+    name: "Refresh Interval"
+    id: rtc_interval_hours
+    icon: mdi:clock-outline
+    entity_category: config
+    unit_of_measurement: "h"
+    min_value: 1
+    max_value: 24
+    step: 1
+    restore_value: true
+    initial_value: 1
+    optimistic: true
+    mode: box
+  - platform: template
+    name: "Active Hours Start"
+    id: rtc_hour_start
+    icon: mdi:weather-sunset-up
+    entity_category: config
+    unit_of_measurement: "h"
+    min_value: 0
+    max_value: 23
+    step: 1
+    restore_value: true
+    initial_value: 7
+    optimistic: true
+    mode: box
+  - platform: template
+    name: "Active Hours End"
+    id: rtc_hour_end
+    icon: mdi:weather-sunset-down
+    entity_category: config
+    unit_of_measurement: "h"
+    min_value: 0
+    max_value: 23
+    step: 1
+    restore_value: true
+    initial_value: 23
+    optimistic: true
+    mode: box
+
+## Online image configuration
+image:
+  - platform: online_image
+    url: https://placehold.co/10x10/white/white/png
+    id: onlineimage
+    type: RGB565
+    format: png
+    on_download_finished:
+      - component.update: epaper_display
+      - lambda: |-
+          g_history[g_hist_head] = (int)id(image_counter).state;
+          g_hist_head = (g_hist_head + 1) % 50;
+          if (g_hist_count < 50) g_hist_count++;
+          ESP_LOGI("img_history", "Added image %d to history (count=%d)",
+                   (int)id(image_counter).state, (int)g_hist_count);
+    on_error:
+      - logger.log:
+          level: WARN
+          format: "Failed to download image %d"
+          args: ["(int)id(image_counter).state"]
+
+## Text configuration
+text:
+  - platform: template
+    name: "Album Folder"
+    id: album_folder_text
+    icon: mdi:folder-image
+    mode: text
+    restore_value: true
+    initial_value: ""
+    optimistic: true
+    max_length: 64
+    entity_category: config
+
+## Switch configuration
+switch:
+  - platform: template
+    name: "Image History"
+    id: use_image_history
+    icon: mdi:history
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+  - platform: restart
+    name: "Device Restart"
+    entity_category: config
+
+button:
+  - platform: template
+    name: "Random Image"
+    id: random_image
+    icon: "mdi:slot-machine"
+    on_press:
+      then:
+        - lambda: |-
+            int total = (int)id(total_images).state;
+            int candidate = -1;
+
+            if (total <= 1) {
+              candidate = 1;
+            } else if (!id(use_image_history).state) {
+              // Pure random: pick any image with no history restriction
+              candidate = (esp_random() % total) + 1;
+            } else {
+              // History-aware: avoid images in the recent window
+              // Window: floor(total/2), capped at 50, never >= total (always >= 1 free slot)
+              int hist_window = total / 2;
+              if (hist_window > 50) hist_window = 50;
+              if (hist_window >= total) hist_window = (total > 1) ? (total - 1) : 0;
+
+              // Try up to 200 random picks to find one not in the recent window
+              int check = ((int)g_hist_count < hist_window) ? (int)g_hist_count : hist_window;
+              for (int attempt = 0; attempt < 200 && candidate == -1; attempt++) {
+                int r = (esp_random() % total) + 1;
+                bool recent = false;
+                for (int i = 0; i < check; i++) {
+                  int idx = ((int)g_hist_head - 1 - i + 50) % 50;
+                  if (g_history[idx] == r) { recent = true; break; }
+                }
+                if (!recent) candidate = r;
+              }
+
+              // Fallback: pick the oldest entry in the window that is still a valid image number
+              if (candidate == -1 && g_hist_count > 0) {
+                int check2 = ((int)g_hist_count < hist_window) ? (int)g_hist_count : hist_window;
+                for (int i = check2 - 1; i >= 0 && candidate == -1; i--) {
+                  int idx = ((int)g_hist_head - 1 - i + 50) % 50;
+                  int img = g_history[idx];
+                  if (img >= 1 && img <= total) candidate = img;
+                }
+              }
+              if (candidate == -1) candidate = 1;
+            }
+
+            id(image_counter).make_call().set_value(candidate).perform();
+  - platform: template
+    name: "Previous Image"
+    id: previous_image
+    icon: "mdi:skip-previous"
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state == 1;'
+            then:
+              - logger.log: "Image counter already at minimum image count"
+            else:
+              - number.decrement:
+                  id: image_counter
+                  cycle: false
+  - platform: template
+    name: "Next Image"
+    id: next_image
+    icon: "mdi:skip-next"
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return id(image_counter).state == id(total_images).state;'
+            then:
+              - logger.log: "Image counter already at total image count"
+            else:
+              - number.increment:
+                  id: image_counter
+                  cycle: false
