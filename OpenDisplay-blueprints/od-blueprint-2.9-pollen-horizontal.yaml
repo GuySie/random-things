@@ -281,10 +281,12 @@ action:
                 response_variable: weather_home_hourly
           - variables:
               daily_offset: "{{ 0 if start_with_today else 1 }}"
+              moon_entity: >
+                {{ (integration_entities('moon') | first) | default('notfound') }}
               moon_available: >
-                {{ false if  states('sensor.moon_phase') == 'unknown' or states('sensor.moon_phase') == 'unavailable' else true }}
+                {{ false if states(moon_entity) == 'unknown' or states(moon_entity) == 'unavailable' else true }}
               moon_phase: >
-                {% set cond_moon = states('sensor.moon_phase') %}
+                {% set cond_moon = states(moon_entity) %}
                 {% if cond_moon == 'new_moon' %}
                 moon-new
                 {% elif cond_moon == 'full_moon' %}
