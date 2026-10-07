@@ -94,6 +94,10 @@ class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
   // declenche AUCUN refresh: ecrit seulement les pixels (a appeler depuis le
   // lambda d'affichage, avant le push GC16).
   void draw_sd_thumbnail(const char *path, int dx, int dy);
+  // Lecture seule du framebuffer (format .raw: 4bpp, miroir X, pixel pair =
+  // nibble bas) pour la capture d'ecran. nullptr si l'allocation PSRAM a echoue.
+  const uint8_t *framebuffer() const { return this->framebuffer_; }
+  static constexpr size_t framebuffer_size() { return 1872 * 1404 / 2; }
   float get_setup_priority() const override { return setup_priority::HARDWARE; }
 
   display::DisplayType get_display_type() override { return display::DisplayType::DISPLAY_TYPE_GRAYSCALE; }

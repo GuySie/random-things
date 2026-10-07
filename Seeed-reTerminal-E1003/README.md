@@ -108,6 +108,54 @@ script:
 #   id(epaper_display).draw_sd_thumbnail("/1_thumb.raw", 78, 111);
 ```
 
+## Reading the framebuffer (screenshots)
+
+`framebuffer()` returns a read-only pointer to the 1872x1404 4bpp buffer (`nullptr` if the PSRAM allocation failed) and `framebuffer_size()` its length, 1314144 bytes. The layout is the `.raw` format used for SD images: horizontal mirror, even pixel in the low nibble. It holds the last render, which can differ from the panel after a partial `flush_zone()`.
+
+To pull it over the native API without opening another port, declare an API action that answers one slice per call. ESPHome truncates any serialized JSON response at 5120 bytes, so a slice is at most about 3 KB once base64-encoded. A full read takes a few hundred calls, during which the screen may redraw: copy the buffer to a snapshot on the first call and serve every slice from that copy.
+
+```yaml
+api:
+  actions:
+    - action: fb_chunk
+      variables:
+        offset: int
+      then:
+        - api.respond:
+            data: !lambda |-
+              const uint8_t *fb = id(epaper_display).framebuffer();
+              const int32_t total = (int32_t) id(epaper_display).framebuffer_size();
+              const int32_t chunk = 3072;
+              if (fb == nullptr || offset < 0 || offset >= total || offset % chunk != 0) {
+                root["e"] = "bad request";
+                return;
+              }
+              static uint8_t *snap = nullptr;
+              static int32_t snap_id = 0;
+              if (offset == 0) {
+                if (snap == nullptr)
+                  snap = static_cast<uint8_t *>(heap_caps_malloc(total, MALLOC_CAP_SPIRAM));
+                if (snap == nullptr) {
+                  root["e"] = "no memory for snapshot";
+                  return;
+                }
+                memcpy(snap, fb, total);
+                snap_id++;
+              }
+              if (snap == nullptr) {
+                root["e"] = "no snapshot, start at offset 0";
+                return;
+              }
+              const int32_t n = std::min<int32_t>(chunk, total - offset);
+              root["s"] = snap_id;
+              root["o"] = offset;
+              root["n"] = n;
+              root["t"] = total;
+              root["d"] = base64_encode(snap + offset, n);
+```
+
+A client calls the action with `return_response=True` (aioesphomeapi `execute_service`) for offsets 0, 3072, 6144... in order, checks that `s` stays constant, and concatenates the decoded slices.
+
 ## Interactive examples (touch dashboard)
 
 These snippets show the display side of a live touch dashboard built on the calls above. They assume a landscape panel (`rotation: 0`, 1872x1404) and the GT911 touch controller enabled.
