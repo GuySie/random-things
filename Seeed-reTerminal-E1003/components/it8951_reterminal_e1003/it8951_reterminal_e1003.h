@@ -61,6 +61,22 @@ class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
   void setup() override;
   void update() override;
   void dump_config() override;
+  // Fast uniform clear (memset) instead of the base per-pixel loop (~2.6M calls
+  // on this panel). Makes the per-frame auto-clear ~instant.
+  void fill(Color color) override;
+
+  // Full-screen INIT + GC16 refresh (flash). Used at boot and for the nightly
+  // deghost. Resets the partial-refresh counter.
+  void full_refresh();
+  // Re-render the whole framebuffer in RAM (runs the display lambda once). Cheap
+  // on CPU but NOT on PSRAM (~seconds); call ONCE then flush_zone() several times.
+  void render_framebuffer();
+  // Push ONLY the given logical rectangle (lambda coordinates) to the panel with
+  // a fast waveform (default mode 1 = DU, no flash). Does NOT re-render; assumes
+  // the framebuffer is current (call render_framebuffer() first).
+  void flush_zone(int x, int y, int w, int h, int mode = 1);
+  // Convenience: render_framebuffer() + flush_zone() for a single isolated zone.
+  void refresh_zone(int x, int y, int w, int h, int mode = 1);
   float get_setup_priority() const override { return setup_priority::HARDWARE; }
 
   display::DisplayType get_display_type() override { return display::DisplayType::DISPLAY_TYPE_GRAYSCALE; }
@@ -77,6 +93,9 @@ class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
   void lcd_write_n_data_(uint16_t *buf, uint32_t word_count);
   void lcd_write_framebuffer_4bpp_(uint16_t *buf, uint16_t width_in_words, uint16_t height);
   void lcd_write_framebuffer_1bpp_(uint16_t width, uint16_t height);
+  void lcd_write_framebuffer_4bpp_area_(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
+  void wake_panel_();
+  void sleep_panel_();
   uint16_t lcd_read_data_();
   void lcd_read_n_data_(uint16_t *buf, uint32_t word_count);
   void lcd_wait_for_ready_();
@@ -119,6 +138,8 @@ class IT8951ReTerminalE1003Display : public display::DisplayBuffer {
   bool it8951_sleeping_{false};
   int8_t temperature_{23};
   uint32_t spi_read_frequency_{1000000};
+  uint32_t partials_since_full_{0};
+  static const uint32_t MAX_PARTIALS_BEFORE_FULL = 180;
 };
 
 }  // namespace it8951_reterminal_e1003
