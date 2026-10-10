@@ -479,7 +479,13 @@ void IT8951ReTerminalE1003Display::full_refresh() {
   const uint16_t w = this->get_width_internal();
   const uint16_t h = this->get_height_internal();
   const uint16_t width_in_words = (w + 3) / 4;
-  const bool use_1bpp = this->framebuffer_is_binary_();
+  // Always 4bpp. The 1bpp path loaded packed bits as an 8bpp image of w/8
+  // columns: only the first 234 columns of each line of the controller buffer
+  // were rewritten. The INIT pass (normal mode) then took that packed data as
+  // the current pixel state, and the 1bpp GC16 drove that 1/8 band with the
+  // wrong waveform (squeezed image during refresh, lighter background after).
+  // The 1bpp transfer only saved ~0.4 s on a 3-4 s refresh.
+  const bool use_1bpp = false;
 
   this->wait_for_display_ready_();
 
