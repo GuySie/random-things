@@ -199,6 +199,17 @@ blueprint:
                   value: "hr"
                 - label: "Swedish"
                   value: "sv"
+        moon_phase_sensor:
+          name: Moon phase sensor
+          description: >-
+            Sensor used for the moon phase icon. Leave blank to detect the Moon
+            integration's sensor automatically (its entity ID is translated, so it
+            isn't always `sensor.moon_phase`). Set this to use a different sensor,
+            such as the Lunar Phase integration's "Moon Phase" sensor.
+          default: ""
+          selector:
+            entity:
+              domain: sensor
         accent_color:
           name: Accent colour
           description: >-
@@ -241,6 +252,7 @@ blueprint:
 
 variables:
   accent_color: !input accent_color
+  moon_phase_sensor: !input moon_phase_sensor
   weather_entity: !input weather_entity
   current_temp_sensor: !input current_temp_sensor
   font_file: !input font_file
@@ -349,7 +361,7 @@ action:
           - variables:
               daily_offset: "{{ 0 if start_with_today else 1 }}"
               moon_entity: >
-                {{ (integration_entities('moon') | first) | default('notfound') }}
+                {{ moon_phase_sensor if (moon_phase_sensor | default('') | trim != '') else ((integration_entities('moon') | first) | default('notfound')) }}
               moon_available: >
                 {{ false if states(moon_entity) == 'unknown' or states(moon_entity) == 'unavailable' else true }}
               moon_phase: >

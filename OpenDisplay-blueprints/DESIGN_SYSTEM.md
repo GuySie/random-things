@@ -171,6 +171,11 @@ These aren't layout, but they're as much a "system" as the pixels:
   through `text_strip_pattern` (`regex_replace` keeping Latin incl.
   extended/accented, common punctuation, € and ™), then collapse repeated
   spaces and trim, so emoji in event titles don't render as tofu boxes.
+- **Moon phase sensor**: never hardcode `sensor.moon_phase` — the Moon
+  integration's entity ID is translated with the instance language. Expose an
+  optional `moon_phase_sensor` entity input and, when it's blank, fall back to
+  `(integration_entities('moon') | first) | default('notfound')` (a missing
+  entity reads as `unknown`, which hides the moon icon).
 - **Payload-array comma trick**: JSON array elements are joined with a
   `{% set ns_out = namespace(first=true) %}` / `{% if not ns_out.first %},{% endif %}`
   pattern so conditionally-included elements don't produce trailing/leading

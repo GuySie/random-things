@@ -62,7 +62,7 @@ blueprint:
               domain: sensor
         moon_phase_sensor:
           name: Moon phase sensor
-          description: Optional moon phase sensor used to pick the moon icon. Leave blank to use Home Assistant's core `sensor.moon_phase`. Set this if you only have the Lunar Phase integration installed (its "Moon Phase" sensor uses a different entity_id per configured location, not `sensor.moon_phase`).
+          description: Optional moon phase sensor used to pick the moon icon. Leave blank to detect the Moon integration's sensor automatically (its entity ID is translated, so it isn't always `sensor.moon_phase`). Set this to use a different sensor, such as the Lunar Phase integration's "Moon Phase" sensor (its entity_id differs per configured location).
           default: ""
           selector:
             entity:
@@ -169,7 +169,7 @@ variables:
   moon_altitude_sensor: !input moon_altitude_sensor
   moon_phase_sensor: !input moon_phase_sensor
   moon_phase_entity: >-
-    {{ moon_phase_sensor if (moon_phase_sensor | default('') | trim != '') else 'sensor.moon_phase' }}
+    {{ moon_phase_sensor if (moon_phase_sensor | default('') | trim != '') else ((integration_entities('moon') | first) | default('notfound')) }}
   language_map: >
     {% set map = {
       "en": { "sunrise": "Sunrise", "sunset": "Sunset", "dawn": "Dawn", "noon": "Solar Noon", "dusk": "Dusk", "default_title": "Sun & Moon", "no_sun": "Sun integration not available." },
