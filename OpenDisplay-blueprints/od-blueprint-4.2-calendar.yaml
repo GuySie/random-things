@@ -101,6 +101,24 @@ blueprint:
           default: ""
           selector:
             text: {}
+        accent_color:
+          name: Accent colour
+          description: >-
+            Colour used for highlights (warnings, severe values, current items) and
+            error messages. 'Accent' uses the panel's own accent colour. Use Black on
+            black-and-white displays, where accent renders invisible.
+          default: accent
+          selector:
+            select:
+              options:
+                - label: "Accent (panel default: red on BWR, yellow on BWY)"
+                  value: accent
+                - label: Black
+                  value: black
+                - label: Red
+                  value: red
+                - label: Yellow
+                  value: yellow
         font_file:
           name: Font file
           description: "Path to a custom font file (default: ppb.ttf) For a better font, use `GothamRnd-Bold.ttf`"
@@ -124,12 +142,16 @@ blueprint:
                   value: "270"
 
 variables:
+  accent_color: !input accent_color
   calendar_entities: !input calendar_entities
   days_shown: !input days_shown
   font_file: !input font_file
   time_format: !input time_format
   weekday_lang: !input weekday_format
   header_title: !input header_title
+  # Strips characters the panel fonts can't render (emoji, symbols) from event
+  # summaries: keeps Latin incl. extended/accented, common punctuation, € and ™.
+  text_strip_pattern: "[^\u0020-\u024F\u2010-\u2027\u2030-\u203B\u20AC\u2122]"
   gap_header: 45
   gap_line: 2
   gap_title: 25
@@ -233,11 +255,11 @@ action:
                     {% if (as_timestamp(event.start) | timestamp_custom('%Y-%m-%d')) == day_key %}
                       {% set day_ns.matched = day_ns.matched + 1 %}
                       {% if (as_timestamp(event.start) | timestamp_custom('%H:%M')) == '00:00' %}
-                        {% set line = language_map[weekday_lang]['all_day_prefix'] ~ event.summary %}
+                        {% set line = language_map[weekday_lang]['all_day_prefix'] ~ (event.summary | default('') | regex_replace(text_strip_pattern, '') | regex_replace(' {2,}', ' ') | trim) %}
                       {% else %}
                         {% set start_label = (as_timestamp(event.start) | timestamp_custom('%-I:%M %p')) if time_format == '12h' else (as_timestamp(event.start) | timestamp_custom('%H:%M')) %}
                         {% set end_label = (as_timestamp(event.end) | timestamp_custom('%-I:%M %p')) if time_format == '12h' else (as_timestamp(event.end) | timestamp_custom('%H:%M')) %}
-                        {% set line = start_label ~ '-' ~ end_label ~ ': ' ~ event.summary %}
+                        {% set line = start_label ~ '-' ~ end_label ~ ': ' ~ (event.summary | default('') | regex_replace(text_strip_pattern, '') | regex_replace(' {2,}', ' ') | trim) %}
                       {% endif %}
                       {% set day_ns.raw = day_ns.raw + [{'ts': as_timestamp(event.start), 'line': line}] %}
                     {% endif %}
@@ -363,7 +385,7 @@ action:
               "x": "50%",
               "y": "50%",
               "size": 24,
-              "color": "red",
+              "color": "{{ accent_color }}",
               "anchor": "mm",
               "max_width": 340
               }

@@ -157,6 +157,24 @@ blueprint:
                   value: "hr"
                 - label: "Swedish"
                   value: "sv"
+        accent_color:
+          name: Accent colour
+          description: >-
+            Colour used for highlights (warnings, severe values, current items) and
+            error messages. 'Accent' uses the panel's own accent colour. Use Black on
+            black-and-white displays, where accent renders invisible.
+          default: accent
+          selector:
+            select:
+              options:
+                - label: "Accent (panel default: red on BWR, yellow on BWY)"
+                  value: accent
+                - label: Black
+                  value: black
+                - label: Red
+                  value: red
+                - label: Yellow
+                  value: yellow
         font_file:
           name: Font file
           description: "Path to a custom font file (default: ppb.ttf) For a better font, use `GothamRnd-Bold.ttf`"
@@ -180,6 +198,7 @@ blueprint:
                   value: "270"
 
 variables:
+  accent_color: !input accent_color
   weather_entity: !input weather_entity
   current_temp_sensor: !input current_temp_sensor
   font_file: !input font_file
@@ -429,7 +448,7 @@ action:
                   "x": 3,
                   "y": 5,
                   "size": 115,
-                  "color": "{{ 'accent' if states(forecast_entity) in severe_weather else 'black' }}"
+                  "color": "{{ accent_color if states(forecast_entity) in severe_weather else 'black' }}"
                 }
                 {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
@@ -439,7 +458,7 @@ action:
                   "x": 62,
                   "y": 138,
                   "size": 38,
-                  "color": "{{ 'black' if (state_attr(forecast_entity,'temperature') | round) > severe_temp_low else 'accent' }}",
+                  "color": "{{ 'black' if (state_attr(forecast_entity,'temperature') | round) > severe_temp_low else accent_color }}",
                   "anchor": "mm"
                 }
                 {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
@@ -517,7 +536,7 @@ action:
                   "x": 118,
                   "y": 165,
                   "size": 20,
-                  "color": "{{ 'black' if (state_attr(forecast_entity,'wind_speed') | round) < severe_wind_high else 'accent' }}",
+                  "color": "{{ 'black' if (state_attr(forecast_entity,'wind_speed') | round) < severe_wind_high else accent_color }}",
                   "anchor": "rm"
                 }
                 {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
@@ -551,7 +570,7 @@ action:
                     "x": 118,
                     "y": 225,
                     "size": 20,
-                    "color": "{{ 'black' if (pollen_display | float(0)) < severe_pollen_high else 'accent' }}",
+                    "color": "{{ 'black' if (pollen_display | float(0)) < severe_pollen_high else accent_color }}",
                     "anchor": "rm"
                   }
                 {% endif %}
@@ -609,7 +628,7 @@ action:
                     "x": {{ base_x }},
                     "y": 25,
                     "size": 60,
-                    "color": "{{ 'accent' if h.is_severe else 'black' }}"
+                    "color": "{{ accent_color if h.is_severe else 'black' }}"
                   },
                   {
                     "type": "text",
@@ -618,7 +637,7 @@ action:
                     "x": {{ base_x + 30 }},
                     "y": 90,
                     "size": 22,
-                    "color": "{{ 'black' if h.temp > severe_temp_low else 'accent' }}",
+                    "color": "{{ 'black' if h.temp > severe_temp_low else accent_color }}",
                     "anchor": "mt"
                   },
                   {
@@ -627,7 +646,7 @@ action:
                     "x": {{ base_x + 10 }},
                     "y": 107,
                     "size": 21,
-                    "color": "{{ 'accent' if h.wind_is_severe else 'black' }}"
+                    "color": "{{ accent_color if h.wind_is_severe else 'black' }}"
                   },
                   {
                     "type": "text",
@@ -636,7 +655,7 @@ action:
                     "x": {{ base_x + 30 }},
                     "y": 117,
                     "size": 18,
-                    "color": "{{ 'accent' if h.wind_is_severe else 'black' }}",
+                    "color": "{{ accent_color if h.wind_is_severe else 'black' }}",
                     "anchor": "lm"
                   },
                   {
@@ -654,7 +673,7 @@ action:
                     "x": {{ base_x + 16 }},
                     "y": 136,
                     "size": 13,
-                    "color": "{{ 'accent' if h.precip_is_severe else 'black' }}",
+                    "color": "{{ accent_color if h.precip_is_severe else 'black' }}",
                     "anchor": "lm"
                   }
                 {% endfor %}
@@ -677,7 +696,7 @@ action:
                     "x": {{ base_x }},
                     "y": 180,
                     "size": 50,
-                    "color": "{{ 'accent' if d.is_severe else 'black' }}"
+                    "color": "{{ accent_color if d.is_severe else 'black' }}"
                   },
                   {
                     "type": "text",
@@ -686,7 +705,7 @@ action:
                     "x": {{ base_x + 22 }},
                     "y": 234,
                     "size": 13,
-                    "color": "{{ 'black' if d.temp_hi > severe_temp_low else 'accent' }}",
+                    "color": "{{ 'black' if d.temp_hi > severe_temp_low else accent_color }}",
                     "anchor": "rt"
                   },
                   {
@@ -706,7 +725,7 @@ action:
                     "x": {{ base_x + 26 }},
                     "y": 241,
                     "size": 14,
-                    "color": "{{ 'black' if d.temp_lo > severe_temp_low else 'accent' }}",
+                    "color": "{{ 'black' if d.temp_lo > severe_temp_low else accent_color }}",
                     "anchor": "lt"
                   },
                   {
@@ -715,7 +734,7 @@ action:
                     "x": {{ base_x + 5 }},
                     "y": 255,
                     "size": 21,
-                    "color": "{{ 'accent' if d.wind_is_severe else 'black' }}"
+                    "color": "{{ accent_color if d.wind_is_severe else 'black' }}"
                   },
                   {
                     "type": "text",
@@ -724,7 +743,7 @@ action:
                     "x": {{ base_x + 25 }},
                     "y": 265,
                     "size": 16,
-                    "color": "{{ 'accent' if d.wind_is_severe else 'black' }}",
+                    "color": "{{ accent_color if d.wind_is_severe else 'black' }}",
                     "anchor": "lm"
                   }
                   {% if pollen_sensor and d.pollen_value is not none %}
@@ -744,7 +763,7 @@ action:
                       "x": {{ base_x + 17 }},
                       "y": 285,
                       "size": 14,
-                      "color": "{{ 'accent' if d.pollen_is_severe else 'black' }}",
+                      "color": "{{ accent_color if d.pollen_is_severe else 'black' }}",
                       "anchor": "lm"
                     }
                   {% endif %}
@@ -785,7 +804,7 @@ action:
               "x": "50%",
               "y": "50%",
               "size": 24,
-              "color": "red",
+              "color": "{{ accent_color }}",
               "anchor": "mm",
               "max_width": 340
               }

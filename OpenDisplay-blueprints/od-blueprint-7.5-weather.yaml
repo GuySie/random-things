@@ -1,0 +1,650 @@
+blueprint:
+  name: OpenDisplay Weather 7.5"
+  description: >
+    # OpenDisplay Weather (7.5")
+
+    Current weather and a 5-day forecast for an 800 x 480 black & white e-paper display: a location name and date/time header, a large current-conditions icon and temperature, a sunrise/sunset/humidity/wind/precipitation/pressure detail grid, and a 5-day forecast strip. Adapted by Claude for [Guy Sie](https://github.com/guysie) from the [OpenDisplay Weather blueprint](https://github.com/davelee98/ha-epaper-blueprints/blob/main/opendisplay_weather_800x480_bw.yaml) originally by [davelee98](https://github.com/davelee98).
+
+    Developed against a Seeed 7.5" 800 x 480 black & white e-paper tag.
+
+    ## Prerequisites
+
+    - [OpenDisplay Integration](https://github.com/OpenDisplay/Home_Assistant_Integration) (v3.0.0-beta.8 or later) must be installed and configured
+
+    - Any weather integration (e.g., [Met.no](https://www.home-assistant.io/integrations/met)) must be set up, supporting the daily forecast type
+
+    - Recommended optional integration:
+      - [Sun integration](https://www.home-assistant.io/integrations/sun) for accurate day/night weather icons and sunrise/sunset times
+
+    - For a nicer font add [`GothamRnd-Bold.ttf`](https://github.com/chunkysteveo/OpenEPaperLink-HA-Weatherman/raw/refs/heads/main/GothamRnd-Bold.ttf)
+
+  domain: automation
+  input:
+    displays:
+      name: E-Paper Display(s)
+      description: What 7.5" BW ESLs to display the content on
+      selector:
+        device:
+          multiple: true
+          filter:
+            integration: opendisplay
+    automation_trigger:
+      name: Trigger
+      description: When to trigger the automation
+      selector:
+        trigger:
+    location_string:
+      name: Location Name
+      description: "Label displayed at the top of the screen (e.g. 'Chicago, Illinois')"
+      selector:
+        text:
+    optional:
+      name: Optional
+      icon: "mdi:cog"
+      collapsed: true
+      input:
+        automation_conditions:
+          name: Conditions
+          description: Optional conditions that must be met to run the automation
+          default: []
+          selector:
+            condition:
+        weather_entity:
+          name: Weather Entity
+          description: Optional - will auto-select first working weather entity if not specified and also try to fall back to another working one if it is currently not working. Must support the daily forecast type.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: weather
+        current_temp_sensor:
+          name: Current Temperature Sensor
+          description: Optional temperature sensor to use instead of forecast temperature
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+                device_class: temperature
+        time_format:
+          name: Time Format
+          description: Choose between 12-hour (AM/PM) or 24-hour format
+          default: "24h"
+          selector:
+            select:
+              options:
+                - label: "12-hour (AM/PM)"
+                  value: "12h"
+                - label: "24-hour"
+                  value: "24h"
+        weekday_format:
+          name: Language
+          description: Language for the interface
+          default: "en"
+          selector:
+            select:
+              options:
+                - label: "English"
+                  value: "en"
+                - label: "German"
+                  value: "de"
+                - label: "Dutch"
+                  value: "nl"
+                - label: "French"
+                  value: "fr"
+                - label: "Spanish"
+                  value: "es"
+                - label: "Polish"
+                  value: "pl"
+                - label: "Croatian"
+                  value: "hr"
+                - label: "Swedish"
+                  value: "sv"
+        accent_color:
+          name: Accent colour
+          description: >-
+            Colour used for highlights (warnings, severe values, current items) and
+            error messages. 'Accent' uses the panel's own accent colour. Use Black on
+            black-and-white displays, where accent renders invisible. Defaults to
+            Black here, since this blueprint targets a black-and-white 7.5" panel.
+          default: black
+          selector:
+            select:
+              options:
+                - label: "Accent (panel default: red on BWR, yellow on BWY)"
+                  value: accent
+                - label: Black
+                  value: black
+                - label: Red
+                  value: red
+                - label: Yellow
+                  value: yellow
+        font_file:
+          name: Font file
+          description: "Path to a custom font file (default: ppb.ttf) For a better font, use `GothamRnd-Bold.ttf`"
+          default: ppb.ttf
+          selector:
+            text: {}
+        rotate:
+          name: Rotation
+          description: "Display rotation in degrees."
+          default: "0"
+          selector:
+            select:
+              options:
+                - label: "0"
+                  value: "0"
+                - label: "90"
+                  value: "90"
+                - label: "180"
+                  value: "180"
+                - label: "270"
+                  value: "270"
+
+variables:
+  accent_color: !input accent_color
+  weather_entity: !input weather_entity
+  current_temp_sensor: !input current_temp_sensor
+  font_file: !input font_file
+  weekday_lang: !input weekday_format
+  time_format: !input time_format
+  location_string: !input location_string
+  forecast_entity: >-
+    {% if weather_entity and states(weather_entity) not in ['unknown', 'unavailable'] %}
+      {{ weather_entity }}
+    {% else %}
+      {{ (states | selectattr('domain','equalto','weather') | rejectattr('state','in',['unknown','unavailable']) | list | first).entity_id if states | selectattr('domain','equalto','weather') | rejectattr('state','in',['unknown','unavailable']) | list else 'unavailable' }}
+    {% endif %}
+  language_map: >
+    {% set map = {
+      "en": {"no_weather": "No working weather entity found.", "sunrise": "Sunrise", "sunset": "Sunset", "humidity": "Humidity", "precipitation": "Precipitation", "wind": "Wind", "pressure": "Pressure"},
+      "de": {"no_weather": "Keine funktionierende Wetter-Entität gefunden.", "sunrise": "Sonnenaufgang", "sunset": "Sonnenuntergang", "humidity": "Luftfeuchtigkeit", "precipitation": "Niederschlag", "wind": "Wind", "pressure": "Luftdruck"},
+      "nl": {"no_weather": "Geen werkende weerentiteit gevonden.", "sunrise": "Zonsopgang", "sunset": "Zonsondergang", "humidity": "Luchtvochtigheid", "precipitation": "Neerslag", "wind": "Wind", "pressure": "Luchtdruk"},
+      "fr": {"no_weather": "Aucune entité météo fonctionnelle trouvée.", "sunrise": "Lever du soleil", "sunset": "Coucher du soleil", "humidity": "Humidité", "precipitation": "Précipitations", "wind": "Vent", "pressure": "Pression"},
+      "es": {"no_weather": "No se encontró ninguna entidad meteorológica funcional.", "sunrise": "Amanecer", "sunset": "Atardecer", "humidity": "Humedad", "precipitation": "Precipitación", "wind": "Viento", "pressure": "Presión"},
+      "pl": {"no_weather": "Nie znaleziono działającej encji pogodowej.", "sunrise": "Wschód słońca", "sunset": "Zachód słońca", "humidity": "Wilgotność", "precipitation": "Opady", "wind": "Wiatr", "pressure": "Ciśnienie"},
+      "hr": {"no_weather": "Nije pronađen nijedan funkcionalan vremenski entitet.", "sunrise": "Izlazak sunca", "sunset": "Zalazak sunca", "humidity": "Vlažnost", "precipitation": "Oborine", "wind": "Vjetar", "pressure": "Tlak"},
+      "sv": {"no_weather": "Ingen fungerande väderentitet hittades.", "sunrise": "Soluppgång", "sunset": "Solnedgång", "humidity": "Luftfuktighet", "precipitation": "Nederbörd", "wind": "Vind", "pressure": "Lufttryck"}
+    } %}
+    {{ map }}
+  weekday_short_map: >
+    {% set map = {
+      "en": ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
+      "de": ["Mo","Di","Mi","Do","Fr","Sa","So"],
+      "nl": ["Ma","Di","Wo","Do","Vr","Za","Zo"],
+      "fr": ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"],
+      "es": ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"],
+      "pl": ["Pon","Wt","Śr","Czw","Pt","Sob","Nie"],
+      "hr": ["Pon","Uto","Sri","Čet","Pet","Sub","Ned"],
+      "sv": ["Mån","Tis","Ons","Tor","Fre","Lör","Sön"]
+    } %}
+    {{ map }}
+  months_short_map: >
+    {% set map = {
+      "en": ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],
+      "de": ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"],
+      "nl": ["Jan","Feb","Mrt","Apr","Mei","Jun","Jul","Aug","Sep","Okt","Nov","Dec"],
+      "fr": ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"],
+      "es": ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"],
+      "pl": ["Sty","Lut","Mar","Kwi","Maj","Cze","Lip","Sie","Wrz","Paź","Lis","Gru"],
+      "hr": ["Sij","Velj","Ožu","Tra","Svi","Lip","Srp","Kol","Ruj","Lis","Stu","Pro"],
+      "sv": ["Jan","Feb","Mar","Apr","Maj","Jun","Jul","Aug","Sep","Okt","Nov","Dec"]
+    } %}
+    {{ map }}
+  updated_text: >-
+    {% set time_str = as_timestamp(now()) | timestamp_custom('%H:%M') if time_format == '24h' else as_timestamp(now()) | timestamp_custom('%-I:%M %p') %}
+    {{ weekday_short_map[weekday_lang][now().weekday()] }} {{ now().day }} {{ months_short_map[weekday_lang][now().month - 1] }}, {{ time_str }}
+
+trigger: !input automation_trigger
+conditions: !input automation_conditions
+
+action:
+  - choose:
+      - conditions:
+          - "{{ forecast_entity != 'unavailable' }}"
+        sequence:
+          - action: weather.get_forecasts
+            target:
+              entity_id: "{{ forecast_entity }}"
+            data:
+              type: daily
+            response_variable: weather_home_daily
+          - variables:
+              day_conditions_map:
+                clear-night: "mdi:weather-night"
+                cloudy: "mdi:weather-cloudy"
+                fog: "mdi:weather-fog"
+                hail: "mdi:weather-hail"
+                lightning: "mdi:weather-lightning"
+                lightning-rainy: "mdi:weather-lightning-rainy"
+                partlycloudy: "mdi:weather-partly-cloudy"
+                pouring: "mdi:weather-pouring"
+                rainy: "mdi:weather-rainy"
+                snowy: "mdi:weather-snowy"
+                snowy-rainy: "mdi:weather-snowy-rainy"
+                sunny: "mdi:weather-sunny"
+                windy: "mdi:weather-windy"
+                windy-variant: "mdi:weather-windy-variant"
+                exceptional: "mdi:alert-circle-outline"
+              night_conditions_map:
+                clear-night: "mdi:weather-night"
+                cloudy: "mdi:weather-cloudy"
+                fog: "mdi:weather-fog"
+                hail: "mdi:weather-hail"
+                lightning: "mdi:weather-lightning"
+                lightning-rainy: "mdi:weather-lightning-rainy"
+                partlycloudy: "mdi:weather-night-partly-cloudy"
+                pouring: "mdi:weather-pouring"
+                rainy: "mdi:weather-rainy"
+                snowy: "mdi:weather-snowy"
+                snowy-rainy: "mdi:weather-snowy-rainy"
+                sunny: "mdi:weather-night"
+                windy: "mdi:weather-windy"
+                windy-variant: "mdi:weather-windy-variant"
+                exceptional: "mdi:alert-circle-outline"
+              sun_available: >-
+                {{ states('sun.sun') not in ['unknown', 'unavailable'] }}
+              daily_forecast: >
+                {% set ns = namespace(list=[]) %}
+                {% set dl = weather_home_daily[forecast_entity]['forecast'] %}
+                {% for i in range(6) %}
+                  {% if i < dl | length %}
+                    {% set fc = dl[i] %}
+                    {% set condition = fc.condition %}
+                    {% set precip_prob = fc.precipitation_probability %}
+                    {% set ns.list = ns.list + [{
+                      'weekday_label': weekday_short_map[weekday_lang][as_local(as_datetime(fc.datetime)).weekday()],
+                      'icon': day_conditions_map[condition] | default('mdi:weather-' ~ condition),
+                      'temp_hi': (fc.temperature | round(0) | int) if fc.temperature is not none else none,
+                      'temp_lo': (fc.templow | round(0) | int) if fc.templow is not none else none,
+                      'precip_prob': (precip_prob | round(0) | int) if precip_prob is not none else none
+                    }] %}
+                  {% endif %}
+                {% endfor %}
+                {{ ns.list }}
+              current_icon: >-
+                {% set condition = states(forecast_entity) %}
+                {% set is_night = sun_available and states('sun.sun') == 'below_horizon' %}
+                {{ (night_conditions_map if is_night else day_conditions_map)[condition] | default('mdi:weather-' ~ condition) }}
+              current_temp: >-
+                {% if current_temp_sensor and current_temp_sensor != '' and states(current_temp_sensor) not in ['unknown', 'unavailable'] %}
+                  {% set t = states(current_temp_sensor) | float(none) %}
+                {% else %}
+                  {% set t = state_attr(forecast_entity, 'temperature') %}
+                {% endif %}
+                {{ (t | round(0) | int) if t is not none else none }}
+              current_humidity: >-
+                {% set h = state_attr(forecast_entity, 'humidity') %}
+                {{ (h | round(0) | int) if h is not none else none }}
+              current_wind_speed: >-
+                {% set w = state_attr(forecast_entity, 'wind_speed') %}
+                {{ (w | round(0) | int) if w is not none else none }}
+              current_wind_speed_unit: "{{ state_attr(forecast_entity, 'wind_speed_unit') or '' }}"
+              current_pressure: >-
+                {% set p = state_attr(forecast_entity, 'pressure') %}
+                {{ (p | round(0) | int) if p is not none else none }}
+              current_pressure_unit: "{{ state_attr(forecast_entity, 'pressure_unit') or '' }}"
+
+          - action: opendisplay.drawcustom
+            target:
+              device_id: !input displays
+            data:
+              background: white
+              rotate: !input rotate
+              payload: >
+                [
+                {% set ns_out = namespace(first=true) %}
+
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ location_string | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 400,
+                  "y": 12,
+                  "size": 32,
+                  "color": "black",
+                  "anchor": "mt"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": "{{ updated_text }}",
+                  "font": "{{ font_file }}",
+                  "x": 400,
+                  "y": 44,
+                  "size": 20,
+                  "color": "#AAAAAA",
+                  "anchor": "mt"
+                }
+
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "icon",
+                  "value": "{{ current_icon }}",
+                  "x": 20,
+                  "y": 90,
+                  "size": 180,
+                  "color": "black"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": "{{ current_temp if current_temp is not none else '--' }}°",
+                  "font": "{{ font_file }}",
+                  "x": 220,
+                  "y": 130,
+                  "size": 80,
+                  "color": "black",
+                  "anchor": "lt"
+                }
+                {% if daily_forecast | length > 0 %}
+                  {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                  {
+                    "type": "text",
+                    "value": "{{ daily_forecast[0].temp_hi if daily_forecast[0].temp_hi is not none else '--' }} /",
+                    "font": "{{ font_file }}",
+                    "x": 285,
+                    "y": 230,
+                    "size": 28,
+                    "color": "#555555",
+                    "anchor": "rm"
+                  }
+                  {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                  {
+                    "type": "text",
+                    "value": "{{ daily_forecast[0].temp_lo if daily_forecast[0].temp_lo is not none else '--' }}",
+                    "font": "{{ font_file }}",
+                    "x": 295,
+                    "y": 230,
+                    "size": 28,
+                    "color": "#555555",
+                    "anchor": "lm"
+                  }
+                {% endif %}
+
+                {% if sun_available %}
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "icon",
+                  "value": "mdi:weather-sunset-up",
+                  "x": 390,
+                  "y": 90,
+                  "size": 40,
+                  "color": "#555555"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ language_map[weekday_lang]['sunrise'] | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 490,
+                  "y": 98,
+                  "size": 14,
+                  "color": "#AAAAAA",
+                  "anchor": "mm"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": "{% if time_format == '12h' %}{{ as_timestamp(state_attr('sun.sun', 'next_rising')) | timestamp_custom('%-I:%M %p') }}{% else %}{{ as_timestamp(state_attr('sun.sun', 'next_rising')) | timestamp_custom('%H:%M') }}{% endif %}",
+                  "font": "{{ font_file }}",
+                  "x": 490,
+                  "y": 125,
+                  "size": 25,
+                  "color": "#555555",
+                  "anchor": "mm"
+                }
+                {% endif %}
+
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "icon",
+                  "value": "mdi:water",
+                  "x": 390,
+                  "y": 160,
+                  "size": 40,
+                  "color": "#555555"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ language_map[weekday_lang]['humidity'] | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 490,
+                  "y": 168,
+                  "size": 14,
+                  "color": "#AAAAAA",
+                  "anchor": "mm"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": "{{ current_humidity if current_humidity is not none else '--' }}%",
+                  "font": "{{ font_file }}",
+                  "x": 490,
+                  "y": 195,
+                  "size": 25,
+                  "color": "#555555",
+                  "anchor": "mm"
+                }
+
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "icon",
+                  "value": "mdi:water-percent",
+                  "x": 390,
+                  "y": 230,
+                  "size": 50,
+                  "color": "#555555"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ language_map[weekday_lang]['precipitation'] | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 490,
+                  "y": 238,
+                  "size": 14,
+                  "color": "#AAAAAA",
+                  "anchor": "mm"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": "{{ (daily_forecast[1].precip_prob if (daily_forecast | length > 1 and daily_forecast[1].precip_prob is not none) else '--') }}%",
+                  "font": "{{ font_file }}",
+                  "x": 490,
+                  "y": 265,
+                  "size": 25,
+                  "color": "#555555",
+                  "anchor": "mm"
+                }
+
+                {% if sun_available %}
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "icon",
+                  "value": "mdi:weather-sunset-down",
+                  "x": 602,
+                  "y": 90,
+                  "size": 40,
+                  "color": "#555555"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ language_map[weekday_lang]['sunset'] | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 702,
+                  "y": 98,
+                  "size": 14,
+                  "color": "#AAAAAA",
+                  "anchor": "mm"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": "{% if time_format == '12h' %}{{ as_timestamp(state_attr('sun.sun', 'next_setting')) | timestamp_custom('%-I:%M %p') }}{% else %}{{ as_timestamp(state_attr('sun.sun', 'next_setting')) | timestamp_custom('%H:%M') }}{% endif %}",
+                  "font": "{{ font_file }}",
+                  "x": 702,
+                  "y": 125,
+                  "size": 25,
+                  "color": "#555555",
+                  "anchor": "mm"
+                }
+                {% endif %}
+
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "icon",
+                  "value": "mdi:weather-windy",
+                  "x": 602,
+                  "y": 160,
+                  "size": 40,
+                  "color": "#555555"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ language_map[weekday_lang]['wind'] | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 702,
+                  "y": 168,
+                  "size": 14,
+                  "color": "#AAAAAA",
+                  "anchor": "mm"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": "{{ current_wind_speed if current_wind_speed is not none else '--' }} {{ current_wind_speed_unit if current_wind_speed is not none else '' }}",
+                  "font": "{{ font_file }}",
+                  "x": 702,
+                  "y": 195,
+                  "size": 25,
+                  "color": "#555555",
+                  "anchor": "mm"
+                }
+
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "icon",
+                  "value": "mdi:gauge",
+                  "x": 602,
+                  "y": 230,
+                  "size": 40,
+                  "color": "#555555"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ language_map[weekday_lang]['pressure'] | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 702,
+                  "y": 238,
+                  "size": 14,
+                  "color": "#AAAAAA",
+                  "anchor": "mm"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": "{{ current_pressure if current_pressure is not none else '--' }} {{ current_pressure_unit if current_pressure is not none else '' }}",
+                  "font": "{{ font_file }}",
+                  "x": 702,
+                  "y": 265,
+                  "size": 25,
+                  "color": "#555555",
+                  "anchor": "mm"
+                }
+
+                {% set box_width = 150 %}
+                {% set box_gap = 10 %}
+                {% set n_boxes = [(daily_forecast | length - 1), 5] | min %}
+                {% set n_boxes = [n_boxes, 0] | max %}
+                {% set strip_width = (n_boxes * box_width) + ([(n_boxes - 1), 0] | max * box_gap) %}
+                {% set strip_start_x = (800 - strip_width) / 2 %}
+                {% for i in range(n_boxes) %}
+                  {% set d = daily_forecast[i + 1] %}
+                  {% set box_x_start = strip_start_x + (i * (box_width + box_gap)) %}
+                  {% set box_x_end = box_x_start + box_width %}
+                  {% set center_x = box_x_start + (box_width / 2) %}
+                  {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                  {
+                    "type": "rectangle",
+                    "x_start": {{ box_x_start | round | int }},
+                    "y_start": 309,
+                    "x_end": {{ box_x_end | round | int }},
+                    "y_end": 462,
+                    "radius": 20,
+                    "outline": "#AAAAAA",
+                    "width": 2
+                  }
+                  {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                  {
+                    "type": "text",
+                    "value": {{ d.weekday_label | tojson }},
+                    "font": "{{ font_file }}",
+                    "x": {{ center_x | round | int }},
+                    "y": 325,
+                    "size": 22,
+                    "color": "#555555",
+                    "anchor": "mt"
+                  }
+                  {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                  {
+                    "type": "icon",
+                    "value": "{{ d.icon }}",
+                    "x": {{ (center_x - 32) | round | int }},
+                    "y": 350,
+                    "size": 65,
+                    "color": "#555555"
+                  }
+                  {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                  {
+                    "type": "text",
+                    "value": "{{ d.temp_hi if d.temp_hi is not none else '--' }} /",
+                    "font": "{{ font_file }}",
+                    "x": {{ (center_x + 7) | round | int }},
+                    "y": 437,
+                    "size": 22,
+                    "color": "#555555",
+                    "anchor": "rm"
+                  }
+                  {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                  {
+                    "type": "text",
+                    "value": "{{ d.temp_lo if d.temp_lo is not none else '--' }}",
+                    "font": "{{ font_file }}",
+                    "x": {{ (center_x + 12) | round | int }},
+                    "y": 437,
+                    "size": 22,
+                    "color": "#555555",
+                    "anchor": "lm"
+                  }
+                {% endfor %}
+                ]
+    default:
+      - action: opendisplay.drawcustom
+        target:
+          device_id: !input displays
+        data:
+          background: white
+          rotate: !input rotate
+          payload: >
+            [
+              {
+              "type": "text",
+              "value": {{ language_map[weekday_lang]['no_weather'] | tojson }},
+              "font": "{{ font_file }}",
+              "x": "50%",
+              "y": "50%",
+              "size": 24,
+              "color": "{{ accent_color }}",
+              "anchor": "mm",
+              "max_width": 700
+              }
+            ]
+
+mode: single

@@ -399,6 +399,24 @@ blueprint:
                   value: "hr"
                 - label: "Swedish"
                   value: "sv"
+        accent_color:
+          name: Accent colour
+          description: >-
+            Colour used for highlights (warnings, severe values, current items) and
+            error messages. 'Accent' uses the panel's own accent colour. Use Black on
+            black-and-white displays, where accent renders invisible.
+          default: accent
+          selector:
+            select:
+              options:
+                - label: "Accent (panel default: red on BWR, yellow on BWY)"
+                  value: accent
+                - label: Black
+                  value: black
+                - label: Red
+                  value: red
+                - label: Yellow
+                  value: yellow
         font_file:
           name: Font file
           description: "Path to a custom font file (default: ppb.ttf) For a better font, use `GothamRnd-Bold.ttf`"
@@ -422,6 +440,7 @@ blueprint:
                   value: "270"
 
 variables:
+  accent_color: !input accent_color
   font_file: !input font_file
   header_title: !input header_title
   severe_moisture_low: !input severe_moisture_low
@@ -657,7 +676,7 @@ action:
                   "x": 194,
                   "y": {{ 38 + loop.index0 * 24 }},
                   "size": 20,
-                  "color": "{{ 'accent' if plant.is_low else 'black' }}",
+                  "color": "{{ accent_color if plant.is_low else 'black' }}",
                   "anchor": "rm"
                 }
                 {% endfor %}
@@ -681,7 +700,7 @@ action:
                   "x": 395,
                   "y": {{ 38 + loop.index0 * 24 }},
                   "size": 20,
-                  "color": "{{ 'accent' if plant.is_low else 'black' }}",
+                  "color": "{{ accent_color if plant.is_low else 'black' }}",
                   "anchor": "rm"
                 }
                 {% endfor %}
@@ -702,7 +721,7 @@ action:
               "x": "50%",
               "y": "50%",
               "size": 24,
-              "color": "red",
+              "color": "{{ accent_color }}",
               "anchor": "mm",
               "max_width": 340
               }

@@ -1,0 +1,716 @@
+blueprint:
+  name: Gicisky Plant Moisture 7.5"
+  description: >
+    # Gicisky Plant Moisture Dashboard (7.5")
+
+    A blueprint that displays soil moisture readings for up to 22 plants, laid out as two columns of 11 rows each, on a 7.5" 800 x 480 e-paper tag. Each row's sensor and label are fully configurable, and plants are packed in order (no gaps) so leaving slots empty just shortens the list. A configurable threshold highlights dry plants in red. Adapted by Claude for [Guy Sie](https://github.com/guysie) from the OpenDisplay Plant Moisture blueprint in this same repo.
+
+    Developed against a 7.5" 800 x 480 BWR e-paper tag driven by the [hass-ble-esl](https://github.com/eigger/hass-ble-esl) integration (successor to the archived hass-gicisky).
+
+    ## Prerequisites
+
+    - The [hass-ble-esl](https://github.com/eigger/hass-ble-esl) integration must be installed (HACS) and configured, with your tag paired over Bluetooth
+
+    - One or more soil moisture sensors (e.g. from a plant monitor integration) must be set up
+
+    - The default font (`NotoSansKR-Regular.ttf`) ships with the integration. Other bundled fonts (`GmarketSansTTFBold.ttf`, `GmarketSansTTFMedium.ttf`, `CookieRunBold.ttf`, etc.) work too, or drop your own `.ttf` into Home Assistant's `config/www/fonts/` and point `font_file` at it
+
+    ## Notes for anyone comparing this to the OpenDisplay version
+
+    - This targets the `ble_esl.write` action instead of `opendisplay.drawcustom` — the drawing element schema (`text`/`rectangle`/`line`/`icon`, `x`/`y`, `font`, `size`, `color`, `anchor`, ...) is close enough between the two that most of the payload carried over unchanged.
+
+    - Gicisky's renderer (`imagespec`) has no "accent" palette alias like OpenDisplay does, so there's no device-agnostic stand-in color for "this crossed a threshold." Low-moisture values below the threshold render directly in `red` instead.
+
+  domain: automation
+  input:
+    displays:
+      name: E-Paper Display(s)
+      description: What Gicisky ESLs (BLE ESL integration) to display the content on
+      selector:
+        device:
+          multiple: true
+          filter:
+            integration: ble_esl
+    automation_trigger:
+      name: Trigger
+      description: When to trigger the automation
+      selector:
+        trigger:
+    optional:
+      name: Optional
+      icon: "mdi:cog"
+      collapsed: true
+      input:
+        automation_conditions:
+          name: Conditions
+          description: Optional conditions that must be met to run the automation
+          default: []
+          selector:
+            condition:
+        plant_1_sensor:
+          name: "Plant 1 - Sensor"
+          description: Soil moisture sensor for plant 1. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_1_label:
+          name: "Plant 1 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_2_sensor:
+          name: "Plant 2 - Sensor"
+          description: Soil moisture sensor for plant 2. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_2_label:
+          name: "Plant 2 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_3_sensor:
+          name: "Plant 3 - Sensor"
+          description: Soil moisture sensor for plant 3. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_3_label:
+          name: "Plant 3 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_4_sensor:
+          name: "Plant 4 - Sensor"
+          description: Soil moisture sensor for plant 4. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_4_label:
+          name: "Plant 4 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_5_sensor:
+          name: "Plant 5 - Sensor"
+          description: Soil moisture sensor for plant 5. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_5_label:
+          name: "Plant 5 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_6_sensor:
+          name: "Plant 6 - Sensor"
+          description: Soil moisture sensor for plant 6. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_6_label:
+          name: "Plant 6 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_7_sensor:
+          name: "Plant 7 - Sensor"
+          description: Soil moisture sensor for plant 7. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_7_label:
+          name: "Plant 7 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_8_sensor:
+          name: "Plant 8 - Sensor"
+          description: Soil moisture sensor for plant 8. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_8_label:
+          name: "Plant 8 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_9_sensor:
+          name: "Plant 9 - Sensor"
+          description: Soil moisture sensor for plant 9. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_9_label:
+          name: "Plant 9 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_10_sensor:
+          name: "Plant 10 - Sensor"
+          description: Soil moisture sensor for plant 10. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_10_label:
+          name: "Plant 10 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_11_sensor:
+          name: "Plant 11 - Sensor"
+          description: Soil moisture sensor for plant 11. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_11_label:
+          name: "Plant 11 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_12_sensor:
+          name: "Plant 12 - Sensor"
+          description: Soil moisture sensor for plant 12. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_12_label:
+          name: "Plant 12 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_13_sensor:
+          name: "Plant 13 - Sensor"
+          description: Soil moisture sensor for plant 13. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_13_label:
+          name: "Plant 13 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_14_sensor:
+          name: "Plant 14 - Sensor"
+          description: Soil moisture sensor for plant 14. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_14_label:
+          name: "Plant 14 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_15_sensor:
+          name: "Plant 15 - Sensor"
+          description: Soil moisture sensor for plant 15. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_15_label:
+          name: "Plant 15 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_16_sensor:
+          name: "Plant 16 - Sensor"
+          description: Soil moisture sensor for plant 16. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_16_label:
+          name: "Plant 16 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_17_sensor:
+          name: "Plant 17 - Sensor"
+          description: Soil moisture sensor for plant 17. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_17_label:
+          name: "Plant 17 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_18_sensor:
+          name: "Plant 18 - Sensor"
+          description: Soil moisture sensor for plant 18. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_18_label:
+          name: "Plant 18 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_19_sensor:
+          name: "Plant 19 - Sensor"
+          description: Soil moisture sensor for plant 19. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_19_label:
+          name: "Plant 19 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_20_sensor:
+          name: "Plant 20 - Sensor"
+          description: Soil moisture sensor for plant 20. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_20_label:
+          name: "Plant 20 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_21_sensor:
+          name: "Plant 21 - Sensor"
+          description: Soil moisture sensor for plant 21. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_21_label:
+          name: "Plant 21 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        plant_22_sensor:
+          name: "Plant 22 - Sensor"
+          description: Soil moisture sensor for plant 22. Leave blank to disable this row.
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: sensor
+        plant_22_label:
+          name: "Plant 22 - Label"
+          description: Optional label override. Leave blank to derive it from the sensor's name.
+          default: ""
+          selector:
+            text: {}
+        severe_moisture_low:
+          name: Low moisture threshold
+          description: If a plant's moisture is at or below this percentage, its value renders in red
+          default: 14
+          selector:
+            number:
+              min: 0
+              max: 100
+              unit_of_measurement: "%"
+              mode: box
+        header_title:
+          name: Header title
+          description: Text shown at the top-left of the display. Leave blank to use a translated default.
+          default: ""
+          selector:
+            text: {}
+        time_format:
+          name: Time Format
+          description: Choose between 12-hour (AM/PM) or 24-hour format for the "last updated" timestamp
+          default: "24h"
+          selector:
+            select:
+              options:
+                - label: "12-hour (AM/PM)"
+                  value: "12h"
+                - label: "24-hour"
+                  value: "24h"
+        weekday_format:
+          name: Language
+          description: Language for interface text
+          default: "en"
+          selector:
+            select:
+              options:
+                - label: "English"
+                  value: "en"
+                - label: "German"
+                  value: "de"
+                - label: "Dutch"
+                  value: "nl"
+                - label: "French"
+                  value: "fr"
+                - label: "Spanish"
+                  value: "es"
+                - label: "Polish"
+                  value: "pl"
+                - label: "Croatian"
+                  value: "hr"
+                - label: "Swedish"
+                  value: "sv"
+        font_file:
+          name: Font file
+          description: "Font bundled with the hass-ble-esl integration (default: NotoSansKR-Regular.ttf), another bundled font (e.g. GmarketSansTTFBold.ttf), or a filename found in config/www/fonts/"
+          default: NotoSansKR-Regular.ttf
+          selector:
+            text: {}
+        rotate:
+          name: Rotation
+          description: "Display rotation in degrees."
+          default: "0"
+          selector:
+            select:
+              options:
+                - label: "0"
+                  value: "0"
+                - label: "90"
+                  value: "90"
+                - label: "180"
+                  value: "180"
+                - label: "270"
+                  value: "270"
+
+variables:
+  font_file: !input font_file
+  header_title: !input header_title
+  severe_moisture_low: !input severe_moisture_low
+  time_format: !input time_format
+  weekday_lang: !input weekday_format
+  plant_1_sensor: !input plant_1_sensor
+  plant_1_label: !input plant_1_label
+  plant_2_sensor: !input plant_2_sensor
+  plant_2_label: !input plant_2_label
+  plant_3_sensor: !input plant_3_sensor
+  plant_3_label: !input plant_3_label
+  plant_4_sensor: !input plant_4_sensor
+  plant_4_label: !input plant_4_label
+  plant_5_sensor: !input plant_5_sensor
+  plant_5_label: !input plant_5_label
+  plant_6_sensor: !input plant_6_sensor
+  plant_6_label: !input plant_6_label
+  plant_7_sensor: !input plant_7_sensor
+  plant_7_label: !input plant_7_label
+  plant_8_sensor: !input plant_8_sensor
+  plant_8_label: !input plant_8_label
+  plant_9_sensor: !input plant_9_sensor
+  plant_9_label: !input plant_9_label
+  plant_10_sensor: !input plant_10_sensor
+  plant_10_label: !input plant_10_label
+  plant_11_sensor: !input plant_11_sensor
+  plant_11_label: !input plant_11_label
+  plant_12_sensor: !input plant_12_sensor
+  plant_12_label: !input plant_12_label
+  plant_13_sensor: !input plant_13_sensor
+  plant_13_label: !input plant_13_label
+  plant_14_sensor: !input plant_14_sensor
+  plant_14_label: !input plant_14_label
+  plant_15_sensor: !input plant_15_sensor
+  plant_15_label: !input plant_15_label
+  plant_16_sensor: !input plant_16_sensor
+  plant_16_label: !input plant_16_label
+  plant_17_sensor: !input plant_17_sensor
+  plant_17_label: !input plant_17_label
+  plant_18_sensor: !input plant_18_sensor
+  plant_18_label: !input plant_18_label
+  plant_19_sensor: !input plant_19_sensor
+  plant_19_label: !input plant_19_label
+  plant_20_sensor: !input plant_20_sensor
+  plant_20_label: !input plant_20_label
+  plant_21_sensor: !input plant_21_sensor
+  plant_21_label: !input plant_21_label
+  plant_22_sensor: !input plant_22_sensor
+  plant_22_label: !input plant_22_label
+  plants: >
+    {% set ns = namespace(list=[]) %}
+    {% set slots = [
+      {'entity': plant_1_sensor, 'label': plant_1_label},
+      {'entity': plant_2_sensor, 'label': plant_2_label},
+      {'entity': plant_3_sensor, 'label': plant_3_label},
+      {'entity': plant_4_sensor, 'label': plant_4_label},
+      {'entity': plant_5_sensor, 'label': plant_5_label},
+      {'entity': plant_6_sensor, 'label': plant_6_label},
+      {'entity': plant_7_sensor, 'label': plant_7_label},
+      {'entity': plant_8_sensor, 'label': plant_8_label},
+      {'entity': plant_9_sensor, 'label': plant_9_label},
+      {'entity': plant_10_sensor, 'label': plant_10_label},
+      {'entity': plant_11_sensor, 'label': plant_11_label},
+      {'entity': plant_12_sensor, 'label': plant_12_label},
+      {'entity': plant_13_sensor, 'label': plant_13_label},
+      {'entity': plant_14_sensor, 'label': plant_14_label},
+      {'entity': plant_15_sensor, 'label': plant_15_label},
+      {'entity': plant_16_sensor, 'label': plant_16_label},
+      {'entity': plant_17_sensor, 'label': plant_17_label},
+      {'entity': plant_18_sensor, 'label': plant_18_label},
+      {'entity': plant_19_sensor, 'label': plant_19_label},
+      {'entity': plant_20_sensor, 'label': plant_20_label},
+      {'entity': plant_21_sensor, 'label': plant_21_label},
+      {'entity': plant_22_sensor, 'label': plant_22_label}
+    ] %}
+    {% for slot in slots %}
+      {% if slot.entity and slot.entity != '' %}
+        {% set raw_state = states(slot.entity) %}
+        {% set has_value = raw_state not in ['unknown', 'unavailable', 'none', ''] %}
+        {% set pct_raw = (raw_state | float(0)) if has_value else 0 %}
+        {% set pct_raw = ([pct_raw, 0] | max) %}
+        {% set pct_raw = ([pct_raw, 100] | min) %}
+        {% set pct = pct_raw | round | int %}
+        {% set fname = state_attr(slot.entity, 'friendly_name') or slot.entity %}
+        {% set fname_lower = fname | lower %}
+        {% if slot.label and slot.label != '' %}
+          {% set label_text = slot.label %}
+        {% elif fname_lower.endswith(' soil moisture') %}
+          {% set label_text = fname[:-14] %}
+        {% elif fname_lower.endswith(' moisture') %}
+          {% set label_text = fname[:-9] %}
+        {% else %}
+          {% set label_text = fname %}
+        {% endif %}
+        {% set ns.list = ns.list + [{
+          'label': label_text,
+          'percent_text': ((pct | string) + '%') if has_value else '--',
+          'is_low': has_value and pct <= severe_moisture_low
+        }] %}
+      {% endif %}
+    {% endfor %}
+    {{ ns.list }}
+  language_map: >
+    {% set map = {
+      "en": { "no_plants": "No plants configured.", "default_title": "Plants" },
+      "de": { "no_plants": "Keine Pflanzen konfiguriert.", "default_title": "Pflanzen" },
+      "nl": { "no_plants": "Geen planten geconfigureerd.", "default_title": "Planten" },
+      "fr": { "no_plants": "Aucune plante configurée.", "default_title": "Plantes" },
+      "es": { "no_plants": "No hay plantas configuradas.", "default_title": "Plantas" },
+      "pl": { "no_plants": "Nie skonfigurowano żadnych roślin.", "default_title": "Rośliny" },
+      "hr": { "no_plants": "Nije konfigurirana nijedna biljka.", "default_title": "Biljke" },
+      "sv": { "no_plants": "Inga växter konfigurerade.", "default_title": "Växter" }
+    } %}
+    {{ map }}
+  header_title_display: >-
+    {{ header_title if header_title else language_map[weekday_lang]['default_title'] }}
+  weekday_short_map: >
+    {% set map = {
+      "en": ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
+      "de": ["Mo","Di","Mi","Do","Fr","Sa","So"],
+      "nl": ["Ma","Di","Wo","Do","Vr","Za","Zo"],
+      "fr": ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"],
+      "es": ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"],
+      "pl": ["Pon","Wt","Śr","Czw","Pt","Sob","Nie"],
+      "hr": ["Pon","Uto","Sri","Čet","Pet","Sub","Ned"],
+      "sv": ["Mån","Tis","Ons","Tor","Fre","Lör","Sön"]
+    } %}
+    {{ map }}
+  months_short_map: >
+    {% set map = {
+      "en": ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],
+      "de": ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"],
+      "nl": ["Jan","Feb","Mrt","Apr","Mei","Jun","Jul","Aug","Sep","Okt","Nov","Dec"],
+      "fr": ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"],
+      "es": ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"],
+      "pl": ["Sty","Lut","Mar","Kwi","Maj","Cze","Lip","Sie","Wrz","Paź","Lis","Gru"],
+      "hr": ["Sij","Velj","Ožu","Tra","Svi","Lip","Srp","Kol","Ruj","Lis","Stu","Pro"],
+      "sv": ["Jan","Feb","Mar","Apr","Maj","Jun","Jul","Aug","Sep","Okt","Nov","Dec"]
+    } %}
+    {{ map }}
+  updated_text: >-
+    {% set time_str = as_timestamp(now()) | timestamp_custom('%-I:%M %p') if time_format == '12h' else as_timestamp(now()) | timestamp_custom('%H:%M') %}
+    {{ weekday_short_map[weekday_lang][now().weekday()] }} {{ now().day }} {{ months_short_map[weekday_lang][now().month - 1] }}, {{ time_str }}
+
+trigger: !input automation_trigger
+conditions: !input automation_conditions
+
+action:
+  - choose:
+      - conditions:
+          - "{{ plants | length > 0 }}"
+        sequence:
+          - action: ble_esl.write
+            target:
+              device_id: !input displays
+            data:
+              background: white
+              rotate: !input rotate
+              payload: >
+                [
+                {% set ns_out = namespace(first=true) %}
+                {% set col1 = plants[:11] %}
+                {% set col2 = plants[11:22] %}
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "rectangle",
+                  "x_start": 0,
+                  "x_end": 800,
+                  "y_start": 0,
+                  "y_end": 26,
+                  "width": 0,
+                  "fill": "black",
+                  "outline": "black"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "icon",
+                  "value": "mdi:sprout",
+                  "x": 2,
+                  "y": 1,
+                  "size": 24,
+                  "color": "white"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ header_title_display | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 28,
+                  "y": 13,
+                  "size": 20,
+                  "color": "white",
+                  "anchor": "lm"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": "{{ updated_text }}",
+                  "font": "{{ font_file }}",
+                  "x": 795,
+                  "y": 13,
+                  "size": 14,
+                  "color": "white",
+                  "anchor": "rm"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "line",
+                  "x_start": 400,
+                  "x_end": 400,
+                  "y_start": 32,
+                  "y_end": 468,
+                  "fill": "black",
+                  "width": 1
+                }
+                {% for plant in col1 %}
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ plant.label | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 15,
+                  "y": {{ 50 + loop.index0 * 40 }},
+                  "size": 22,
+                  "color": "black",
+                  "anchor": "lm"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": "{{ plant.percent_text }}",
+                  "font": "{{ font_file }}",
+                  "x": 390,
+                  "y": {{ 50 + loop.index0 * 40 }},
+                  "size": 30,
+                  "color": "{{ 'red' if plant.is_low else 'black' }}",
+                  "anchor": "rm"
+                }
+                {% endfor %}
+                {% for plant in col2 %}
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ plant.label | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": 415,
+                  "y": {{ 50 + loop.index0 * 40 }},
+                  "size": 22,
+                  "color": "black",
+                  "anchor": "lm"
+                }
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": "{{ plant.percent_text }}",
+                  "font": "{{ font_file }}",
+                  "x": 785,
+                  "y": {{ 50 + loop.index0 * 40 }},
+                  "size": 30,
+                  "color": "{{ 'red' if plant.is_low else 'black' }}",
+                  "anchor": "rm"
+                }
+                {% endfor %}
+                ]
+    default:
+      - action: ble_esl.write
+        target:
+          device_id: !input displays
+        data:
+          background: white
+          rotate: !input rotate
+          payload: >
+            [
+              {
+              "type": "text",
+              "value": "{{ language_map[weekday_lang]['no_plants'] }}",
+              "font": "{{ font_file }}",
+              "x": 400,
+              "y": 240,
+              "size": 24,
+              "color": "red",
+              "anchor": "mm",
+              "max_width": 700
+              }
+            ]
+mode: single

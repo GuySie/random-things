@@ -17,6 +17,12 @@ blueprint:
 
     Unlike other blueprints in this collection, this one does not expose a generic trigger picker. Instead, pick your tag as the display below, then pick the button's own `event.*` entity (e.g. `event.<your_tag>_button_1`) as the trigger — the blueprint wires up the button-press detection for you from there.
 
+    The automation reacts to either `button_down` or `button_up`, because a sleeping tag sometimes only delivers the release of the first press. One press (down + up) still causes a single redraw: the automation runs in `single` mode and silently ignores further presses while the display is refreshing.
+
+    ## Instant feedback
+
+    Colour e-paper panels take ~30 seconds to refresh. To confirm a press straight away, the tag's LED flashes first (within a second or two), and only then is the new image rendered and sent. If the LED flash fails, the display is still updated.
+
     ## Known upstream issue: header cropping workaround
 
     There's currently an upstream OpenDisplay rendering bug that crops roughly the top two-thirds (~17px of the 26px header) off this canvas in this rotation. To compensate, every element in this payload is shifted down by a 17px `header_buffer` (see the `variables:` block), and the body text sizes/positions below the header were compressed slightly to still fit above the bottom edge (date: 28pt → 24pt, time: 60pt → 52pt, label: 18pt → 16pt).
@@ -50,6 +56,23 @@ blueprint:
           default: []
           selector:
             condition:
+        led_color:
+          name: LED flash colour
+          description: Colour of the confirmation flash shown as soon as a press is registered.
+          default: [0, 255, 0]
+          selector:
+            color_rgb: {}
+        led_flash_delay:
+          name: LED flash interval
+          description: Time between the confirmation flashes.
+          default: 500
+          selector:
+            number:
+              min: 100
+              max: 1500
+              step: 100
+              unit_of_measurement: ms
+              mode: slider
         time_format:
           name: Time Format
           description: Choose between 12-hour (AM/PM) or 24-hour format for the displayed time
@@ -115,8 +138,10 @@ blueprint:
 trigger:
   - trigger: state
     entity_id: !input button_entity
-    attribute: event_type
-    to: "button_down"
+    # Every press changes the event entity's state (its timestamp); the
+    # event_type check below then filters for actual button presses.
+    not_from: [unavailable, unknown]
+    not_to: [unavailable, unknown]
 conditions: !input automation_conditions
 
 variables:
@@ -185,6 +210,21 @@ variables:
     {{ language_map[weekday_lang]['weekdays'][now().weekday()] }} {{ now().day }} {{ language_map[weekday_lang]['months'][now().month - 1] }}
 
 action:
+  # A sleeping tag sometimes only delivers the release of the first press, so
+  # accept either half; `mode: single` + `max_exceeded: silent` keeps one
+  # press (down + up) to a single redraw.
+  - condition: template
+    value_template: "{{ trigger.to_state.attributes.get('event_type') in ['button_down', 'button_up'] }}"
+  # Confirm the press right away — the colour redraw below takes ~30s.
+  - action: opendisplay.activate_led
+    continue_on_error: true
+    data:
+      device_id: !input display
+      color1: !input led_color
+      flash_count1: 2
+      loop_delay1: !input led_flash_delay
+      brightness: 16
+      repeats: 1
   - action: opendisplay.drawcustom
     target:
       device_id: !input display
@@ -254,3 +294,4 @@ action:
         }
         ]
 mode: single
+max_exceeded: silent

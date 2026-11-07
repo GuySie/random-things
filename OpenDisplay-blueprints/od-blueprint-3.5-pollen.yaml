@@ -177,6 +177,24 @@ blueprint:
                   value: "hr"
                 - label: "Swedish"
                   value: "sv"
+        accent_color:
+          name: Accent colour
+          description: >-
+            Colour used for highlights (warnings, severe values, current items) and
+            error messages. 'Accent' uses the panel's own accent colour. Use Black on
+            black-and-white displays, where accent renders invisible.
+          default: accent
+          selector:
+            select:
+              options:
+                - label: "Accent (panel default: red on BWR, yellow on BWY)"
+                  value: accent
+                - label: Black
+                  value: black
+                - label: Red
+                  value: red
+                - label: Yellow
+                  value: yellow
         font_file:
           name: Font file
           description: "Path to a custom font file (default: ppb.ttf) For a better font, use `GothamRnd-Bold.ttf`"
@@ -200,6 +218,7 @@ blueprint:
                   value: "270"
 
 variables:
+  accent_color: !input accent_color
   weather_entity: !input weather_entity
   current_temp_sensor: !input current_temp_sensor
   font_file: !input font_file
@@ -221,35 +240,43 @@ variables:
     {% set map = {
       "en": {
         "weekdays": ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],
-        "no_weather": "No working weather entity found."
+        "no_weather": "No working weather entity found.",
+        "humidity_abbr": "Hum"
       },
       "de": {
         "weekdays": ["So","Mo","Di","Mi","Do","Fr","Sa"],
-        "no_weather": "Keine funktionierende Wetter-Entität gefunden."
+        "no_weather": "Keine funktionierende Wetter-Entität gefunden.",
+        "humidity_abbr": "Feu"
       },
       "fr": {
         "weekdays": ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"],
-        "no_weather": "Aucune entité météo fonctionnelle trouvée."
+        "no_weather": "Aucune entité météo fonctionnelle trouvée.",
+        "humidity_abbr": "Humid"
       },
       "nl": {
         "weekdays": ["Zo","Ma","Di","Wo","Do","Vr","Za"],
-        "no_weather": "Geen werkende weerentiteit gevonden."
+        "no_weather": "Geen werkende weerentiteit gevonden.",
+        "humidity_abbr": "Vocht"
       },
       "es": {
         "weekdays": ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"],
-        "no_weather": "No se encontró ninguna entidad meteorológica funcional."
+        "no_weather": "No se encontró ninguna entidad meteorológica funcional.",
+        "humidity_abbr": "Hum"
       },
       "pl": {
         "weekdays": ["Nd","Pn","Wt","Śr","Cz","Pt","So"],
-        "no_weather": "Nie znaleziono działającej encji pogodowej."
+        "no_weather": "Nie znaleziono działającej encji pogodowej.",
+        "humidity_abbr": "Wilg"
       },
       "hr": {
         "weekdays": ["Ned","Pon","Uto","Sri","Čet","Pet","Sub"],
-        "no_weather": "Nije pronađen nijedan funkcionalan vremenski entitet."
+        "no_weather": "Nije pronađen nijedan funkcionalan vremenski entitet.",
+        "humidity_abbr": "Vlaga"
       },
       "sv": {
         "weekdays": ["Sön","Mån","Tis","Ons","Tors","Fre","Lör"],
-        "no_weather": "Ingen fungerande väderentitet hittades."
+        "no_weather": "Ingen fungerande väderentitet hittades.",
+        "humidity_abbr": "Fukt"
       }
     } %}
     {{ map }}
@@ -370,7 +397,7 @@ action:
                 {% else %}
                   {% set humidity = state_attr(forecast_entity, 'humidity') %}
                   {% set ns.list = ns.list + [{
-                    'label': '',
+                    'label': language_map[weekday_lang]['humidity_abbr'],
                     'icon': 'mdi:water-percent',
                     'is_severe': false,
                     'temp': humidity | round if humidity is not none else 0,
@@ -422,7 +449,7 @@ action:
                     "x": 8,
                     "y": 8,
                     "size": 102,
-                    "color": "{{ 'accent' if states(forecast_entity) in severe_weather else 'black' }}"
+                    "color": "{{ accent_color if states(forecast_entity) in severe_weather else 'black' }}"
                   }
                   {% if moon_available %}
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
@@ -443,7 +470,7 @@ action:
                     "x": 67,
                     "y": 110,
                     "size": 42,
-                    "color": "{{ 'black' if state_attr(forecast_entity,'temperature') | round > severe_temp_low else 'accent' }}",
+                    "color": "{{ 'black' if state_attr(forecast_entity,'temperature') | round > severe_temp_low else accent_color }}",
                     "anchor": "mt"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
@@ -453,7 +480,7 @@ action:
                     "x": 8,
                     "y": 149,
                     "size": 22,
-                    "color": "{% if wind_or_precipitation == 'windspeed' %}{{ 'black' if state_attr(forecast_entity,'wind_speed') | round < severe_wind_high else 'accent' }}{% else %}{{ 'black' if current_precip|round < severe_rain_high else 'accent' }}{% endif %}"
+                    "color": "{% if wind_or_precipitation == 'windspeed' %}{{ 'black' if state_attr(forecast_entity,'wind_speed') | round < severe_wind_high else accent_color }}{% else %}{{ 'black' if current_precip|round < severe_rain_high else accent_color }}{% endif %}"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                   {
@@ -463,7 +490,7 @@ action:
                     "x": 34,
                     "y": 152,
                     "size": 20,
-                    "color": "{% if wind_or_precipitation == 'windspeed' %}{{ 'black' if state_attr(forecast_entity,'wind_speed') | round < severe_wind_high else 'accent' }}{% else %}{{ 'black' if current_precip|round < severe_rain_high else 'accent' }}{% endif %}",
+                    "color": "{% if wind_or_precipitation == 'windspeed' %}{{ 'black' if state_attr(forecast_entity,'wind_speed') | round < severe_wind_high else accent_color }}{% else %}{{ 'black' if current_precip|round < severe_rain_high else accent_color }}{% endif %}",
                     "anchor": "lt"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
@@ -484,7 +511,7 @@ action:
                     "x": 173,
                     "y": 27,
                     "size": 38,
-                    "color": "{{ 'accent' if next_forecast[0].is_severe else 'black' }}"
+                    "color": "{{ accent_color if next_forecast[0].is_severe else 'black' }}"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                   {
@@ -494,7 +521,7 @@ action:
                     "x": 192,
                     "y": 68,
                     "size": 20,
-                    "color": "{{ 'accent' if next_forecast[0].temp_severe else 'black' }}",
+                    "color": "{{ accent_color if next_forecast[0].temp_severe else 'black' }}",
                     "anchor": "mt"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
@@ -524,7 +551,7 @@ action:
                     "x": 173,
                     "y": 111,
                     "size": 38,
-                    "color": "{% if pollen_sensor %}{{ 'black' if pollen_display < severe_pollen_high else 'accent' }}{% else %}{{ 'accent' if next_forecast[-1].is_severe else 'black' }}{% endif %}"
+                    "color": "{% if pollen_sensor %}{{ 'black' if pollen_display < severe_pollen_high else accent_color }}{% else %}{{ accent_color if next_forecast[-1].is_severe else 'black' }}{% endif %}"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                   {
@@ -534,7 +561,7 @@ action:
                     "x": 192,
                     "y": 152,
                     "size": 20,
-                    "color": "{% if pollen_sensor %}{{ 'black' if pollen_display < severe_pollen_high else 'accent' }}{% else %}{{ 'black' if next_forecast[-1].temp > severe_temp_low else 'accent' }}{% endif %}",
+                    "color": "{% if pollen_sensor %}{{ 'black' if pollen_display < severe_pollen_high else accent_color }}{% else %}{{ 'black' if next_forecast[-1].temp > severe_temp_low else accent_color }}{% endif %}",
                     "anchor": "mt"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
@@ -544,7 +571,7 @@ action:
                     "x": 265,
                     "y": 8,
                     "size": 102,
-                    "color": "{{ 'accent' if weather_home_daily[forecast_entity]['forecast'][daily_offset].condition in severe_weather else 'black' }}"
+                    "color": "{{ accent_color if weather_home_daily[forecast_entity]['forecast'][daily_offset].condition in severe_weather else 'black' }}"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                   {
@@ -565,7 +592,7 @@ action:
                     "x": 315,
                     "y": 132,
                     "size": 20,
-                    "color": "{{ 'black' if weather_home_daily[forecast_entity]['forecast'][daily_offset].temperature|round > severe_temp_low|round else 'accent' }}",
+                    "color": "{{ 'black' if weather_home_daily[forecast_entity]['forecast'][daily_offset].temperature|round > severe_temp_low|round else accent_color }}",
                     "anchor": "rt"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
@@ -587,7 +614,7 @@ action:
                     "x": 325,
                     "y": 152,
                     "size": 20,
-                    "color": "{{ 'black' if weather_home_daily[forecast_entity]['forecast'][daily_offset].templow|round > severe_temp_low|round else 'accent' }}",
+                    "color": "{{ 'black' if weather_home_daily[forecast_entity]['forecast'][daily_offset].templow|round > severe_temp_low|round else accent_color }}",
                     "anchor": "lt"
                   }
                 ]
@@ -607,7 +634,7 @@ action:
               "x": "50%",
               "y": "50%",
               "size": 20,
-              "color": "red",
+              "color": "{{ accent_color }}",
               "anchor": "mm",
               "max_width": 195
               }

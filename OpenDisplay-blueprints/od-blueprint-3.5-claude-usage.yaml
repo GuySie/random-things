@@ -227,6 +227,24 @@ blueprint:
                   value: "hr"
                 - label: "Swedish"
                   value: "sv"
+        accent_color:
+          name: Accent colour
+          description: >-
+            Colour used for highlights (warnings, severe values, current items) and
+            error messages. 'Accent' uses the panel's own accent colour. Use Black on
+            black-and-white displays, where accent renders invisible.
+          default: accent
+          selector:
+            select:
+              options:
+                - label: "Accent (panel default: red on BWR, yellow on BWY)"
+                  value: accent
+                - label: Black
+                  value: black
+                - label: Red
+                  value: red
+                - label: Yellow
+                  value: yellow
         font_file:
           name: Font file
           description: "Path to a custom font file (default: ppb.ttf) For a better font, use `GothamRnd-Bold.ttf`"
@@ -250,6 +268,7 @@ blueprint:
                   value: "270"
 
 variables:
+  accent_color: !input accent_color
   font_file: !input font_file
   weekday_lang: !input weekday_format
   warning_threshold: !input warning_threshold
@@ -498,7 +517,7 @@ action:
                   {% set bar_y_start = label_y + label_size + mid_gap %}
                   {% set bar_y_end = bar_y_start + bar_h %}
                   {% set caption_y = bar_y_end + mid_gap %}
-                  {% set fill_color = 'accent' if bar.is_warning else 'black' %}
+                  {% set fill_color = accent_color if bar.is_warning else 'black' %}
                   {% set ns_row.y = ns_row.y + top_gap + label_size + mid_gap + bar_h + ((mid_gap + caption_size) if bar.reset_caption else 0) %}
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                   {
@@ -583,7 +602,7 @@ action:
               "x": "50%",
               "y": "50%",
               "size": 22,
-              "color": "red",
+              "color": "{{ accent_color }}",
               "anchor": "mm",
               "max_width": 340
               }

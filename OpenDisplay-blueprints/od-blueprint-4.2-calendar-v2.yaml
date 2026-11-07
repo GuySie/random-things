@@ -101,6 +101,24 @@ blueprint:
                   value: "hr"
                 - label: "Swedish"
                   value: "sv"
+        accent_color:
+          name: Accent colour
+          description: >-
+            Colour used for highlights (warnings, severe values, current items) and
+            error messages. 'Accent' uses the panel's own accent colour. Use Black on
+            black-and-white displays, where accent renders invisible.
+          default: accent
+          selector:
+            select:
+              options:
+                - label: "Accent (panel default: red on BWR, yellow on BWY)"
+                  value: accent
+                - label: Black
+                  value: black
+                - label: Red
+                  value: red
+                - label: Yellow
+                  value: yellow
         font_file:
           name: Font file
           description: "Path to a custom font file (default: ppb.ttf) For a better font, use `GothamRnd-Bold.ttf`"
@@ -124,16 +142,24 @@ blueprint:
                   value: "270"
 
 variables:
+  accent_color: !input accent_color
   calendar_entities: !input calendar_entities
   days_shown: !input days_shown
   font_file: !input font_file
   time_format: !input time_format
   weekday_lang: !input weekday_format
   header_title: !input header_title
+  # Strips characters the panel fonts can't render (emoji, symbols) from event
+  # summaries: keeps Latin incl. extended/accented, common punctuation, € and ™.
+  text_strip_pattern: "[^\u0020-\u024F\u2010-\u2027\u2030-\u203B\u20AC\u2122]"
   gap_header: 26
   gap_line: 14
   gap_title: 30
   gap_text: 24
+  # Event times are right-aligned against this x so the summaries form a
+  # fixed column; 12h labels ("10:30 AM-12:00 PM") need a wider column.
+  time_col_x: "{{ 172 if time_format == '12h' else 112 }}"
+  summary_x: "{{ time_col_x | int + 8 }}"
   language_map: >
     {% set map = {
       "en": {
@@ -260,17 +286,17 @@ action:
                     {% if (as_timestamp(event.start) | timestamp_custom('%Y-%m-%d')) == day_key %}
                       {% set day_ns.matched = day_ns.matched + 1 %}
                       {% if (as_timestamp(event.start) | timestamp_custom('%H:%M')) == '00:00' %}
-                        {% set line = language_map[weekday_lang]['all_day_prefix'] ~ event.summary %}
+                        {% set line = {'time': '', 'text': language_map[weekday_lang]['all_day_prefix'] ~ (event.summary | default('') | regex_replace(text_strip_pattern, '') | regex_replace(' {2,}', ' ') | trim)} %}
                       {% else %}
                         {% set start_label = (as_timestamp(event.start) | timestamp_custom('%-I:%M %p')) if time_format == '12h' else (as_timestamp(event.start) | timestamp_custom('%H:%M')) %}
                         {% set end_label = (as_timestamp(event.end) | timestamp_custom('%-I:%M %p')) if time_format == '12h' else (as_timestamp(event.end) | timestamp_custom('%H:%M')) %}
-                        {% set line = start_label ~ '-' ~ end_label ~ ': ' ~ event.summary %}
+                        {% set line = {'time': start_label ~ '-' ~ end_label, 'text': (event.summary | default('') | regex_replace(text_strip_pattern, '') | regex_replace(' {2,}', ' ') | trim)} %}
                       {% endif %}
                       {% set day_ns.raw = day_ns.raw + [{'ts': as_timestamp(event.start), 'line': line}] %}
                     {% endif %}
                   {% endfor %}
                   {% set count = day_ns.matched if day_ns.matched > 0 else 1 %}
-                  {% set event_lines = (day_ns.raw | sort(attribute='ts') | map(attribute='line') | list) if day_ns.matched > 0 else [language_map[weekday_lang]['no_events']] %}
+                  {% set event_lines = (day_ns.raw | sort(attribute='ts') | map(attribute='line') | list) if day_ns.matched > 0 else [{'time': '', 'text': language_map[weekday_lang]['no_events']}] %}
                   {% set sep_y_start = gap_header + i * gap_title + ns.prior * gap_text %}
                   {% set sep_y_end = gap_header + (i + 1) * gap_title + ns.prior * gap_text %}
                   {% set header_y = gap_header + i * gap_title + gap_line + ns.prior * gap_text %}
@@ -360,21 +386,36 @@ action:
                   "x": 14,
                   "y": {{ day.header_y }},
                   "size": 20,
-                  "color": "{{ 'accent' if day.is_today else 'black' }}",
+                  "color": "{{ accent_color if day.is_today else 'black' }}",
                   "anchor": "lm"
                 }
+                {% for line in day.event_lines %}
+                {% set line_y = day.multiline_y + loop.index0 * gap_text %}
+                {% if line.time %}
                 {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                 {
-                  "type": "multiline",
-                  "value": {{ day.event_lines | join('§') | tojson }},
+                  "type": "text",
+                  "value": {{ line.time | tojson }},
                   "font": "{{ font_file }}",
-                  "x": 14,
-                  "y": {{ day.multiline_y }},
-                  "offset_y": 24,
-                  "delimiter": "§",
+                  "x": {{ time_col_x }},
+                  "y": {{ line_y }},
                   "size": 16,
-                  "color": "black"
+                  "color": "black",
+                  "anchor": "rm"
                 }
+                {% endif %}
+                {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
+                {
+                  "type": "text",
+                  "value": {{ line.text | tojson }},
+                  "font": "{{ font_file }}",
+                  "x": {{ summary_x if line.time else 14 }},
+                  "y": {{ line_y }},
+                  "size": 16,
+                  "color": "black",
+                  "anchor": "lm"
+                }
+                {% endfor %}
                 {% endfor %}
                 ]
     default:
@@ -393,7 +434,7 @@ action:
               "x": "50%",
               "y": "50%",
               "size": 24,
-              "color": "red",
+              "color": "{{ accent_color }}",
               "anchor": "mm",
               "max_width": 340
               }

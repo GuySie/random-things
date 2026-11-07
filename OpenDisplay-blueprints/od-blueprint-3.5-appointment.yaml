@@ -99,6 +99,24 @@ blueprint:
           default: ""
           selector:
             text: {}
+        accent_color:
+          name: Accent colour
+          description: >-
+            Colour used for highlights (warnings, severe values, current items) and
+            error messages. 'Accent' uses the panel's own accent colour. Use Black on
+            black-and-white displays, where accent renders invisible.
+          default: accent
+          selector:
+            select:
+              options:
+                - label: "Accent (panel default: red on BWR, yellow on BWY)"
+                  value: accent
+                - label: Black
+                  value: black
+                - label: Red
+                  value: red
+                - label: Yellow
+                  value: yellow
         font_file:
           name: Font file
           description: "Path to a custom font file (default: ppb.ttf) For a better font, use `GothamRnd-Bold.ttf`"
@@ -122,11 +140,15 @@ blueprint:
                   value: "270"
 
 variables:
+  accent_color: !input accent_color
   calendar_entities: !input calendar_entities
   days_ahead: !input days_ahead
   time_format: !input time_format
   weekday_lang: !input weekday_format
   header_title: !input header_title
+  # Strips characters the panel fonts can't render (emoji, symbols) from event
+  # summaries: keeps Latin incl. extended/accented, common punctuation, € and ™.
+  text_strip_pattern: "[^\u0020-\u024F\u2010-\u2027\u2030-\u203B\u20AC\u2122]"
   font_file: !input font_file
   language_map: >
     {% set map = {
@@ -288,7 +310,7 @@ action:
                       'label': label,
                       'is_current': is_current,
                       'time_range': start_label ~ ' - ' ~ end_label,
-                      'summary': e.summary
+                      'summary': (e.summary | default('') | regex_replace(text_strip_pattern, '') | regex_replace(' {2,}', ' ') | trim)
                     }] %}
                   {% endif %}
                 {% endfor %}
@@ -353,7 +375,7 @@ action:
                   "x": "50%",
                   "y": "63%",
                   "size": 22,
-                  "color": "red",
+                  "color": "{{ accent_color }}",
                   "anchor": "mm",
                   "max_width": 340
                 }
@@ -367,7 +389,7 @@ action:
                   "x": 14,
                   "y": 46,
                   "size": 16,
-                  "color": "{{ 'accent' if event.is_current else 'black' }}",
+                  "color": "{{ accent_color if event.is_current else 'black' }}",
                   "anchor": "lm"
                 }
                 {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
@@ -404,7 +426,7 @@ action:
                   "x": 14,
                   "y": {{ row_y + 14 }},
                   "size": 14,
-                  "color": "{{ 'accent' if event.is_current else 'black' }}",
+                  "color": "{{ accent_color if event.is_current else 'black' }}",
                   "anchor": "lm"
                 }
                 {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
@@ -460,7 +482,7 @@ action:
               "x": "50%",
               "y": "50%",
               "size": 22,
-              "color": "red",
+              "color": "{{ accent_color }}",
               "anchor": "mm",
               "max_width": 340
               }

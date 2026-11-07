@@ -32,18 +32,25 @@ readable across a room).
 |---|---|---|
 | `black` | Default content color | Everywhere |
 | `white` | Content drawn on the header bar | Header bar icon/title/meta text only |
-| `accent` | "This value crossed a configured threshold" | Every `severe_*`/`warning_*` comparison |
-| `red` | Hardcoded error/unavailable state | Only in the `default:` fallback branch of the automation's `choose:` |
+| `accent_color` | "This value crossed a configured threshold", and error messages | Every `severe_*`/`warning_*` comparison, plus the `default:` fallback branch of the automation's `choose:` |
 | `half_black` | Progress-bar track background | `claude-usage` bars only |
 
+`accent_color` is a variable, not a literal: every blueprint exposes an
+**Accent colour** input (`accent` / `black` / `red` / `yellow`, default
+`accent`, which is the panel's own accent colour) and binds it with
+`accent_color: !input accent_color`. Templates reference the variable
+(`{{ accent_color if ... else 'black' }}`), never the literal `'accent'` or
+`'red'`. The point is black-and-white panels, where `accent` renders
+invisible: one input switches the whole blueprint to black.
+
 Rules:
-- `accent` is *earned* — it only ever appears as the result of a threshold
+- Accent is *earned* — it only ever appears as the result of a threshold
   comparison against a `severe_*_low`/`severe_*_high`/`warning_threshold`
-  input. Never hardcode it for decoration.
-- `red` is reserved exclusively for the "no data / misconfigured entity"
-  fallback message. Don't use it for in-bounds severe values — that's what
-  `accent` is for. Keeping them distinct means a red screen always means
-  "something is broken," not "something is high."
+  input (or a "current/today" highlight). Never hardcode it for decoration.
+- The "no data / misconfigured entity" fallback message also uses
+  `accent_color`. It used to be hardcoded `red`, but that disappears on a BWY
+  panel and is invisible on black-and-white ones. You can still tell it apart
+  from a severe value by its layout: one centered message and no header bar.
 
 ## Typography
 
@@ -124,9 +131,9 @@ color only the icon or only the text — they move as a pair.
 
 ### Fallback / error state
 The `default:` branch of the automation's `choose:` always renders exactly
-one centered red text block:
+one centered text block in the accent colour:
 ```json
-{ "type": "text", "value": "<translated message>", "font": "{{ font_file }}", "x": "50%", "y": "50%", "size": 20-24, "color": "red", "anchor": "mm", "max_width": <canvas_width - ~40> }
+{ "type": "text", "value": "<translated message>", "font": "{{ font_file }}", "x": "50%", "y": "50%", "size": 20-24, "color": "{{ accent_color }}", "anchor": "mm", "max_width": <canvas_width - ~40> }
 ```
 
 ## Blueprint-level (non-visual) conventions
@@ -149,6 +156,21 @@ These aren't layout, but they're as much a "system" as the pixels:
 - **Day/night condition-icon maps**: the same `day_conditions_map` /
   `night_conditions_map` MDI lookup tables are copy-pasted verbatim into
   every blueprint that renders weather conditions.
+- **Button feedback (LED flash)**: a colour panel takes ~30s to redraw, so
+  blueprints a tag button can trigger flash that tag's LED first
+  (`opendisplay.activate_led`, `continue_on_error: true`, inputs `led_color`
+  default green and `led_flash_delay` default 500ms, `flash_count1: 2`,
+  `brightness: 16`). In the generic-trigger blueprints (1.6"/2.9" pollen)
+  this is an `if:` step that only fires when `trigger.entity_id` is an
+  `event.*` entity belonging to a device, so time-based triggers don't flash.
+  The medication reminder, whose only trigger is the button, flashes
+  unconditionally. Button triggers accept either `button_down` or
+  `button_up`, because a sleeping tag sometimes only delivers the release.
+  `mode: single` + `max_exceeded: silent` keeps one press to one redraw.
+- **Calendar summary sanitising**: calendar blueprints run event summaries
+  through `text_strip_pattern` (`regex_replace` keeping Latin incl.
+  extended/accented, common punctuation, € and ™), then collapse repeated
+  spaces and trim, so emoji in event titles don't render as tofu boxes.
 - **Payload-array comma trick**: JSON array elements are joined with a
   `{% set ns_out = namespace(first=true) %}` / `{% if not ns_out.first %},{% endif %}`
   pattern so conditionally-included elements don't produce trailing/leading
@@ -160,3 +182,13 @@ These aren't layout, but they're as much a "system" as the pixels:
   `day_conditions_map`/`night_conditions_map`, and the header-bar snippet are
   duplicated per-file. If Home Assistant blueprint templating ever supports
   shared includes, that duplication is the first thing to collapse.
+- `od-blueprint-7.5-weather.yaml` is a deliberate exception to this whole
+  document: it's a port of an external author's (davelee98) blueprint, kept
+  close to that source's original layout by request — plain black-on-white
+  throughout (no header bar, no threshold coloring; its Accent colour input
+  defaults to `black` and only colours the fallback error message). Only the
+  non-visual mechanics (`displays`/`automation_trigger` input skeleton,
+  `language_map`/`weekday_short_map`/`months_short_map`, the `ns_out`
+  comma-trick, missing-data guards) were adapted to match this repo. Don't
+  read its absent header bar as an oversight, and don't use its styling as
+  precedent for other new blueprints.

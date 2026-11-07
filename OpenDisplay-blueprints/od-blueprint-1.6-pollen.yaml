@@ -20,6 +20,10 @@ blueprint:
 
     - For a nicer font add [`GothamRnd-Bold.ttf`](https://github.com/chunkysteveo/OpenEPaperLink-HA-Weatherman/raw/refs/heads/main/GothamRnd-Bold.ttf)
 
+    ## Button feedback
+
+    You can add a tag's button to the trigger (an "Entity event received" trigger on its `event.*` entity, e.g. `event.<your_tag>_button_1`). A press then flashes that tag's LED straight away, so you know it registered before the ~30 second redraw. Time-based and other triggers don't flash. If the flash fails, the display is still updated.
+
   domain: automation
   input:
     displays:
@@ -46,6 +50,23 @@ blueprint:
           default: []
           selector:
             condition:
+        led_color:
+          name: LED flash colour
+          description: Colour of the confirmation flash when the update was triggered by a tag button press.
+          default: [0, 255, 0]
+          selector:
+            color_rgb: {}
+        led_flash_delay:
+          name: LED flash interval
+          description: Time between the confirmation flashes.
+          default: 500
+          selector:
+            number:
+              min: 100
+              max: 1500
+              step: 100
+              unit_of_measurement: ms
+              mode: slider
         weather_entity:
           name: Weather Entity
           description: Optional - will auto-select first working weather entity if not specified and also try to fall back to another working one if it is currently not working.
@@ -166,6 +187,24 @@ blueprint:
                   value: "hr"
                 - label: "Swedish"
                   value: "sv"
+        accent_color:
+          name: Accent colour
+          description: >-
+            Colour used for highlights (warnings, severe values, current items) and
+            error messages. 'Accent' uses the panel's own accent colour. Use Black on
+            black-and-white displays, where accent renders invisible.
+          default: accent
+          selector:
+            select:
+              options:
+                - label: "Accent (panel default: red on BWR, yellow on BWY)"
+                  value: accent
+                - label: Black
+                  value: black
+                - label: Red
+                  value: red
+                - label: Yellow
+                  value: yellow
         font_file:
           name: Font file
           description: "Path to a custom font file (default: ppb.ttf) For a better font, use `GothamRnd-Bold.ttf`"
@@ -189,6 +228,7 @@ blueprint:
                   value: "270"
 
 variables:
+  accent_color: !input accent_color
   weather_entity: !input weather_entity
   current_temp_sensor: !input current_temp_sensor
   font_file: !input font_file
@@ -246,6 +286,24 @@ trigger: !input automation_trigger
 conditions: !input automation_conditions
 
 action:
+  # Only when a tag's own button (an event.* entity) fired the trigger: flash
+  # that tag's LED so the press is confirmed before the ~30s redraw finishes.
+  - alias: "Button feedback: flash the pressed tag's LED"
+    if:
+      - condition: template
+        value_template: >-
+          {{ trigger is defined and trigger.entity_id is defined and trigger.entity_id is string
+             and trigger.entity_id.startswith('event.') and device_id(trigger.entity_id) is not none }}
+    then:
+      - action: opendisplay.activate_led
+        continue_on_error: true
+        data:
+          device_id: "{{ device_id(trigger.entity_id) }}"
+          color1: !input led_color
+          flash_count1: 2
+          loop_delay1: !input led_flash_delay
+          brightness: 16
+          repeats: 1
   - choose:
       - conditions:
           - "{{ forecast_entity != 'unavailable' }}"
@@ -391,7 +449,7 @@ action:
                     "x": 8,
                     "y": 3,
                     "size": 121,
-                    "color": "{{ 'accent' if states(forecast_entity) in severe_weather else 'black' }}"
+                    "color": "{{ accent_color if states(forecast_entity) in severe_weather else 'black' }}"
                   }
                   {% if moon_available %}
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
@@ -412,7 +470,7 @@ action:
                     "x": 68,
                     "y": 124,
                     "size": 50,
-                    "color": "{{ 'black' if state_attr(forecast_entity,'temperature') | round > severe_temp_low else 'accent' }}",
+                    "color": "{{ 'black' if state_attr(forecast_entity,'temperature') | round > severe_temp_low else accent_color }}",
                     "anchor": "mt"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
@@ -422,7 +480,7 @@ action:
                     "x": 8,
                     "y": 170,
                     "size": 26,
-                    "color": "{% if wind_or_precipitation == 'windspeed' %}{{ 'black' if state_attr(forecast_entity,'wind_speed') | round < severe_wind_high else 'accent' }}{% else %}{{ 'black' if current_precip|round < severe_rain_high else 'accent' }}{% endif %}"
+                    "color": "{% if wind_or_precipitation == 'windspeed' %}{{ 'black' if state_attr(forecast_entity,'wind_speed') | round < severe_wind_high else accent_color }}{% else %}{{ 'black' if current_precip|round < severe_rain_high else accent_color }}{% endif %}"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                   {
@@ -432,7 +490,7 @@ action:
                     "x": 34,
                     "y": 174,
                     "size": 24,
-                    "color": "{% if wind_or_precipitation == 'windspeed' %}{{ 'black' if state_attr(forecast_entity,'wind_speed') | round < severe_wind_high else 'accent' }}{% else %}{{ 'black' if current_precip|round < severe_rain_high else 'accent' }}{% endif %}",
+                    "color": "{% if wind_or_precipitation == 'windspeed' %}{{ 'black' if state_attr(forecast_entity,'wind_speed') | round < severe_wind_high else accent_color }}{% else %}{{ 'black' if current_precip|round < severe_rain_high else accent_color }}{% endif %}",
                     "anchor": "lt"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
@@ -453,7 +511,7 @@ action:
                     "x": 142,
                     "y": 26,
                     "size": 45,
-                    "color": "{% if pollen_sensor %}{{ 'black' if pollen_display < severe_pollen_high else 'accent' }}{% else %}{{ 'accent' if next_forecast[-1].is_severe else 'black' }}{% endif %}"
+                    "color": "{% if pollen_sensor %}{{ 'black' if pollen_display < severe_pollen_high else accent_color }}{% else %}{{ accent_color if next_forecast[-1].is_severe else 'black' }}{% endif %}"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                   {
@@ -463,7 +521,7 @@ action:
                     "x": 164,
                     "y": 74,
                     "size": 24,
-                    "color": "{% if pollen_sensor %}{{ 'black' if pollen_display < severe_pollen_high else 'accent' }}{% else %}{{ 'black' if next_forecast[-1].temp > severe_temp_low else 'accent' }}{% endif %}",
+                    "color": "{% if pollen_sensor %}{{ 'black' if pollen_display < severe_pollen_high else accent_color }}{% else %}{{ 'black' if next_forecast[-1].temp > severe_temp_low else accent_color }}{% endif %}",
                     "anchor": "mt"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
@@ -484,7 +542,7 @@ action:
                     "x": 142,
                     "y": 122,
                     "size": 45,
-                    "color": "{{ 'accent' if weather_home_daily[forecast_entity]['forecast'][daily_offset].condition in severe_weather else 'black' }}"
+                    "color": "{{ accent_color if weather_home_daily[forecast_entity]['forecast'][daily_offset].condition in severe_weather else 'black' }}"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
                   {
@@ -494,7 +552,7 @@ action:
                     "x": 161,
                     "y": 171,
                     "size": 18,
-                    "color": "{{ 'black' if weather_home_daily[forecast_entity]['forecast'][daily_offset].temperature|round > severe_temp_low else 'accent' }}",
+                    "color": "{{ 'black' if weather_home_daily[forecast_entity]['forecast'][daily_offset].temperature|round > severe_temp_low else accent_color }}",
                     "anchor": "rt"
                   }
                   {% if not ns_out.first %},{% endif %}{% set ns_out.first = false %}
@@ -516,7 +574,7 @@ action:
                     "x": 168,
                     "y": 180,
                     "size": 18,
-                    "color": "{{ 'black' if weather_home_daily[forecast_entity]['forecast'][daily_offset].templow > severe_temp_low|round else 'accent' }}",
+                    "color": "{{ 'black' if weather_home_daily[forecast_entity]['forecast'][daily_offset].templow > severe_temp_low|round else accent_color }}",
                     "anchor": "lt"
                   }
                 ]
@@ -536,7 +594,7 @@ action:
               "x": "50%",
               "y": "50%",
               "size": 24,
-              "color": "red",
+              "color": "{{ accent_color }}",
               "anchor": "mm",
               "max_width": 197
               }

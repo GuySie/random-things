@@ -119,6 +119,24 @@ blueprint:
                   value: "hr"
                 - label: "Swedish"
                   value: "sv"
+        accent_color:
+          name: Accent colour
+          description: >-
+            Colour used for highlights (warnings, severe values, current items) and
+            error messages. 'Accent' uses the panel's own accent colour. Use Black on
+            black-and-white displays, where accent renders invisible.
+          default: accent
+          selector:
+            select:
+              options:
+                - label: "Accent (panel default: red on BWR, yellow on BWY)"
+                  value: accent
+                - label: Black
+                  value: black
+                - label: Red
+                  value: red
+                - label: Yellow
+                  value: yellow
         font_file:
           name: Font file
           description: "Path to a custom font file (default: ppb.ttf) For a better font, use `GothamRnd-Bold.ttf`"
@@ -142,6 +160,7 @@ blueprint:
                   value: "270"
 
 variables:
+  accent_color: !input accent_color
   font_file: !input font_file
   weekday_lang: !input weekday_format
   time_format: !input time_format
@@ -374,7 +393,7 @@ action:
                     {% set bar_h_px = (bucket.scaled * chart_height) | round | int %}
                     {% set bar_h_px = 6 if bar_h_px < 6 else bar_h_px %}
                     {% set y_start = baseline_y - bar_h_px %}
-                    {% set fill_color = 'accent' if bucket.is_severe else 'black' %}
+                    {% set fill_color = accent_color if bucket.is_severe else 'black' %}
                     {% if not ns_out.first %},{% endif %}
                     {% set ns_out.first = false %}
                     {
@@ -438,7 +457,7 @@ action:
               "x": "50%",
               "y": "50%",
               "size": 20,
-              "color": "red",
+              "color": "{{ accent_color }}",
               "anchor": "mm",
               "max_width": 340
               }

@@ -72,6 +72,17 @@ blueprint:
           default: ""
           selector:
             text: {}
+        hemisphere:
+          name: Hemisphere
+          description: Your hemisphere. At solar noon the sun sits due south (azimuth 180°) in the Northern Hemisphere but due north (azimuth 0°/360°) in the Southern Hemisphere. This is used to correctly center the sun/moon position on the horizon strip so it sweeps left-to-right without jumping.
+          default: "northern"
+          selector:
+            select:
+              options:
+                - label: "Northern"
+                  value: "northern"
+                - label: "Southern"
+                  value: "southern"
         time_format:
           name: Time Format
           description: Choose between 12-hour (AM/PM) or 24-hour format
@@ -106,6 +117,24 @@ blueprint:
                   value: "hr"
                 - label: "Swedish"
                   value: "sv"
+        accent_color:
+          name: Accent colour
+          description: >-
+            Colour used for highlights (warnings, severe values, current items) and
+            error messages. 'Accent' uses the panel's own accent colour. Use Black on
+            black-and-white displays, where accent renders invisible.
+          default: accent
+          selector:
+            select:
+              options:
+                - label: "Accent (panel default: red on BWR, yellow on BWY)"
+                  value: accent
+                - label: Black
+                  value: black
+                - label: Red
+                  value: red
+                - label: Yellow
+                  value: yellow
         font_file:
           name: Font file
           description: "Path to a custom font file (default: ppb.ttf) For a better font, use `GothamRnd-Bold.ttf`"
@@ -129,10 +158,12 @@ blueprint:
                   value: "270"
 
 variables:
+  accent_color: !input accent_color
   font_file: !input font_file
   weekday_lang: !input weekday_format
   time_format: !input time_format
   header_title: !input header_title
+  hemisphere: !input hemisphere
   moon_azimuth_sensor: !input moon_azimuth_sensor
   moon_altitude_sensor: !input moon_altitude_sensor
   moon_phase_sensor: !input moon_phase_sensor
@@ -217,13 +248,15 @@ action:
                 {% set elevation_scale = 50 %}
                 {% set sun_azimuth = state_attr('sun.sun', 'azimuth') | float(0) %}
                 {% set sun_elevation = state_attr('sun.sun', 'elevation') | float(0) %}
-                {% set sun_cx = line_x_start + (sun_azimuth / 360 * (line_x_end - line_x_start)) %}
+                {% set sun_azimuth_disp = sun_azimuth if hemisphere == 'northern' else ((540 - sun_azimuth) % 360) %}
+                {% set sun_cx = line_x_start + (sun_azimuth_disp / 360 * (line_x_end - line_x_start)) %}
                 {% set sun_cy = line_y - (sun_elevation / 90 * elevation_scale) %}
                 {% set sun_size = 18 %}
                 {% set moon_azimuth = states(moon_azimuth_sensor) | float(0) if moon_position_available else 0 %}
                 {% set moon_altitude = states(moon_altitude_sensor) | float(0) if moon_position_available else 0 %}
                 {% set moon_altitude_clamped = [[moon_altitude, 0] | max, 90] | min %}
-                {% set moon_cx = line_x_start + (moon_azimuth / 360 * (line_x_end - line_x_start)) %}
+                {% set moon_azimuth_disp = moon_azimuth if hemisphere == 'northern' else ((540 - moon_azimuth) % 360) %}
+                {% set moon_cx = line_x_start + (moon_azimuth_disp / 360 * (line_x_end - line_x_start)) %}
                 {% set moon_cy = line_y - (moon_altitude_clamped / 90 * elevation_scale) %}
                 {% set moon_size = 20 %}
                 {% set ns_out = namespace(first=true) %}
@@ -457,7 +490,7 @@ action:
               "x": "50%",
               "y": "50%",
               "size": 20,
-              "color": "red",
+              "color": "{{ accent_color }}",
               "anchor": "mm",
               "max_width": 340
               }
