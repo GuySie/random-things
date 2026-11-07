@@ -17,6 +17,7 @@ blueprint:
 
     - Recommended: trigger this automation on a `time_pattern` schedule every hour, and add your own conditions (e.g. a vacation-mode helper) under the Optional section if you want to pause updates
 
+  source_url: https://github.com/GuySie/random-things/blob/main/OpenDisplay-blueprints/od-blueprint-4.2-calendar.yaml
   domain: automation
   input:
     displays:

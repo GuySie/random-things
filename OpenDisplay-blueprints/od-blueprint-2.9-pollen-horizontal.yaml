@@ -24,6 +24,7 @@ blueprint:
 
     You can add a tag's button to the trigger (an "Entity event received" trigger on its `event.*` entity, e.g. `event.<your_tag>_button_1`). A press then flashes that tag's LED straight away, so you know it registered before the ~30 second redraw. Time-based and other triggers don't flash. If the flash fails, the display is still updated.
 
+  source_url: https://github.com/GuySie/random-things/blob/main/OpenDisplay-blueprints/od-blueprint-2.9-pollen-horizontal.yaml
   domain: automation
   input:
     displays:

@@ -21,6 +21,7 @@ blueprint:
 
     - Gicisky's renderer (`imagespec`) has no "accent" palette alias like OpenDisplay does, so there's no device-agnostic stand-in color for "this crossed a threshold." Low-moisture values below the threshold render directly in `red` instead.
 
+  source_url: https://github.com/GuySie/random-things/blob/main/OpenDisplay-blueprints/gicisky-blueprint-7.5-plant-moisture.yaml
   domain: automation
   input:
     displays:

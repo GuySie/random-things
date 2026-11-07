@@ -29,6 +29,7 @@ blueprint:
 
     **Once the upstream bug is fixed:** set `header_buffer` back to `0`, and restore the body text to its original un-compressed values: label `y: 46, size: 18` (kept centered between the header and the date), date `y: 80, size: 28`, time `y: 130, size: 60`.
 
+  source_url: https://github.com/GuySie/random-things/blob/main/OpenDisplay-blueprints/od-blueprint-2.9-medication-reminder.yaml
   domain: automation
   input:
     display:

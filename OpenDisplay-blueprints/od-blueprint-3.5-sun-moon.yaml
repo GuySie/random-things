@@ -19,6 +19,7 @@ blueprint:
 
     - For a nicer font add [`GothamRnd-Bold.ttf`](https://github.com/chunkysteveo/OpenEPaperLink-HA-Weatherman/raw/refs/heads/main/GothamRnd-Bold.ttf)
 
+  source_url: https://github.com/GuySie/random-things/blob/main/OpenDisplay-blueprints/od-blueprint-3.5-sun-moon.yaml
   domain: automation
   input:
     displays:
