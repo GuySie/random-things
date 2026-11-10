@@ -48,7 +48,7 @@ Checked and ruled out (do not re-investigate): ESP-IDF sdkconfig flags `CONFIG_E
 
 - `display.py` — ESPHome Python codegen; registers the component and exposes `vcom` config option.
 - `it8951_reterminal_e1003.h/.cpp` — C++ driver. SPI pins are hardcoded to the E1003 schematic (SCK=7, MISO=8, MOSI=9, CS=10, BUSY=13, EN=11, RST=12, ITE_EN=21). On `setup()`, it probes the controller through up to 4 power-cycle attempts to handle cold-boot and wake-from-sleep states, and allocates the framebuffer (1872×1404÷2 bytes = ~1.3 MB) in PSRAM.
-- On `update()`: if the IT8951 is in inter-refresh sleep (flag `it8951_sleeping_`), raises GPIO11 (EPD_Drive_EN), waits 10 ms for the TPS22916 switch, then issues SYS_RUN (0x0001) to wake the IT8951. Then runs the ESPHome draw callback into the framebuffer, detects whether the image is pure binary (all pixels 0x00 or 0x0F) to pick the faster 1bpp upload path vs 4bpp grayscale, sets the ambient temperature on the controller for waveform selection, issues an INIT clear pass (mode 0) to eliminate ghosting, then a GC16 refresh (mode 2). After the refresh completes (LUTAFSR=0), issues SLEEP (0x0003) and drives GPIO11 LOW to cut EPD_Drive power — saving the TPS651851RSLR quiescent current for the remainder of the wake window.
+- On `update()`: if the IT8951 is in inter-refresh sleep (flag `it8951_sleeping_`), raises GPIO11 (EPD_Drive_EN), waits 10 ms for the TPS22916 switch, then issues SYS_RUN (0x0001) to wake the IT8951. Then runs the ESPHome draw callback into the framebuffer, uploads the whole framebuffer in 4bpp (always, see the 1bpp section below), sets the ambient temperature on the controller for waveform selection, issues an INIT clear pass (mode 0) to eliminate ghosting, then a GC16 refresh (mode 2). After the refresh completes (LUTAFSR=0), issues SLEEP (0x0003) and drives GPIO11 LOW to cut EPD_Drive power — saving the TPS651851RSLR quiescent current for the remainder of the wake window.
 - **Power note**: the IT8951 auto-manages POWER_SEQ (EPD panel power on/off) — it powers on when DISPLAY_AREA is called and powers off when the display finishes (LUTAFSR=0). No explicit POWER_SEQ command is needed. SLEEP/SYS_RUN are for the IT8951 clock domain only; GPIO11 (EPD_Drive_EN) is cut separately after SLEEP to eliminate the TPS651851RSLR input quiescent draw. GPIO21 (ITE_VCC_EN / 1.8 V core) remains HIGH across refreshes so the probe sequence is not needed between images in interactive mode.
 
 **`reference/`** — gitignored PDFs and example C code from ITE/Seeed; context only, never committed.
@@ -234,6 +234,8 @@ The driver uses mode 0 (INIT clear) followed by mode 2 (GC16) for each frame, wh
 **DISPLAY_AREA (0x0034) does not wait internally for the LUT engine.** The host must poll LUTAFSR (0x1224) == 0 before issuing this command.
 
 ### 1bpp mode
+
+**Not used by the driver since 2026-10-10.** Loading packed bits as an 8bpp image of w/8 columns rewrites only the first 234 columns of each line of the controller buffer. The INIT pass (normal mode) then takes that packed data as the current pixel state, and the 1bpp GC16 drives this 1/8 band (the right edge, the panel is mirrored in X) with the wrong waveform: a squeezed copy of the image appears there during the refresh and the background stays lighter afterwards. Full refreshes are always 4bpp; the 1bpp transfer only saved about 0.4 s. The notes below are kept for reference.
 
 Used for binary (pure black/white) images — faster to load and refresh.
 
